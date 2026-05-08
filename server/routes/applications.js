@@ -1,4 +1,5 @@
 const express = require('express');
+const { put } = require('@vercel/blob');
 const Application = require('../models/Application');
 const upload = require('../middleware/upload');
 const { protect, requireAdmin, requireStaff } = require('../middleware/auth');
@@ -12,14 +13,21 @@ const fileFields = upload.fields([
   { name: 'validId', maxCount: 1 },
 ]);
 
-function fileFromMulter(file) {
+async function fileFromMulter(file, prefix) {
   if (!file) return undefined;
+  const safeOriginal = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const blobPath = `applications/${prefix}-${Date.now()}-${safeOriginal}`;
+  const blob = await put(blobPath, file.buffer, {
+    access: 'public',
+    contentType: file.mimetype,
+    addRandomSuffix: true,
+  });
   return {
     originalName: file.originalname,
-    filename: file.filename,
+    filename: blob.pathname,
     mimetype: file.mimetype,
     size: file.size,
-    path: `/uploads/${file.filename}`,
+    path: blob.url,
   };
 }
 
@@ -53,6 +61,13 @@ router.post('/', protect, (req, res, next) => {
         return res.status(400).json({ message: 'You must accept the Terms and Conditions' });
       }
 
+      const [offerLetter, bankStatement, staffId, validId] = await Promise.all([
+        fileFromMulter(req.files.offerLetter?.[0], 'offerLetter'),
+        fileFromMulter(req.files.bankStatement?.[0], 'bankStatement'),
+        fileFromMulter(req.files.staffId?.[0], 'staffId'),
+        fileFromMulter(req.files.validId?.[0], 'validId'),
+      ]);
+
       const application = await Application.create({
         user: req.user._id,
         surname: body.surname,
@@ -80,10 +95,10 @@ router.post('/', protect, (req, res, next) => {
         })),
         employerName: body.employerName,
         officeAddress: body.officeAddress,
-        offerLetter: fileFromMulter(req.files.offerLetter?.[0]),
-        bankStatement: fileFromMulter(req.files.bankStatement?.[0]),
-        staffId: fileFromMulter(req.files.staffId?.[0]),
-        validId: fileFromMulter(req.files.validId?.[0]),
+        offerLetter,
+        bankStatement,
+        staffId,
+        validId,
         termsAccepted: true,
         status: 'received',
       });
@@ -204,10 +219,10 @@ router.patch('/:id', protect, (req, res, next) => {
         allowEdit: false,
       });
 
-      if (req.files?.offerLetter?.[0]) existing.offerLetter = fileFromMulter(req.files.offerLetter[0]);
-      if (req.files?.bankStatement?.[0]) existing.bankStatement = fileFromMulter(req.files.bankStatement[0]);
-      if (req.files?.staffId?.[0]) existing.staffId = fileFromMulter(req.files.staffId[0]);
-      if (req.files?.validId?.[0]) existing.validId = fileFromMulter(req.files.validId[0]);
+      if (req.files?.offerLetter?.[0]) existing.offerLetter = await fileFromMulter(req.files.offerLetter[0], 'offerLetter');
+      if (req.files?.bankStatement?.[0]) existing.bankStatement = await fileFromMulter(req.files.bankStatement[0], 'bankStatement');
+      if (req.files?.staffId?.[0]) existing.staffId = await fileFromMulter(req.files.staffId[0], 'staffId');
+      if (req.files?.validId?.[0]) existing.validId = await fileFromMulter(req.files.validId[0], 'validId');
 
       await existing.save();
       const populated = await Application.findById(existing._id)

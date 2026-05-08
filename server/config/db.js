@@ -1,10 +1,19 @@
 const mongoose = require('mongoose');
 
+const cache = global.__grofin_mongo || (global.__grofin_mongo = { conn: null, promise: null });
+
 async function connectDB() {
+  if (cache.conn) return cache.conn;
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is not set');
-  await mongoose.connect(uri);
-  console.log('MongoDB connected');
+  if (!cache.promise) {
+    cache.promise = mongoose.connect(uri).then((m) => {
+      console.log('MongoDB connected');
+      return m;
+    });
+  }
+  cache.conn = await cache.promise;
+  return cache.conn;
 }
 
 module.exports = connectDB;

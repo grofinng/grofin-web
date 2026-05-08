@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { applicationsApi } from '../api/applications';
-import { extractApiError, FILE_BASE } from '../api/client';
+import { extractApiError, fileUrl } from '../api/client';
 import { Application, ApplicationStatus, PopulatedUserRef, Vendor } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
 import { StatusBadge } from '../components/StatusBadge';
@@ -367,7 +367,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function DocLink({ label, path }: { label: string; path: string }) {
   return (
-    <a className="btn btn-secondary" href={`${FILE_BASE}${path}`} target="_blank" rel="noreferrer">
+    <a className="btn btn-secondary" href={fileUrl(path)} target="_blank" rel="noreferrer">
       {label}
     </a>
   );

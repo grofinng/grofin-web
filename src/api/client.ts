@@ -21,7 +21,13 @@ export function extractApiError(err: unknown, fallback = 'Something went wrong')
   return fallback;
 }
 
-export const FILE_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8080/api').replace(
+const FILE_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8080/api').replace(
   /\/api\/?$/,
   ''
 );
+
+export function fileUrl(path: string): string {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${FILE_BASE}${path}`;
+}
