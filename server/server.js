@@ -12,8 +12,16 @@ const app = express();
 
 const allowedOrigin = process.env.CLIENT_URL || 'http://localhost:3000';
 app.use(cors({ origin: allowedOrigin, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// On Vercel the runtime auto-parses JSON / urlencoded bodies onto req.body
+// and consumes the request stream. Running express.json() after that hangs
+// the stream forever. Skip body parsers in serverless; the route handlers
+// already use req.body which Vercel populates.
+const isServerless = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+if (!isServerless) {
+  app.use(express.json({ limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+}
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'grofin-api' }));
 
