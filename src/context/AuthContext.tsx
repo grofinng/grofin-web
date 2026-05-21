@@ -13,8 +13,8 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const TOKEN_KEY = 'grofin_token';
-const USER_KEY = 'grofin_user';
+const TOKEN_KEY = 'esena_token';
+const USER_KEY = 'esena_user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {

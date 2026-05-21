@@ -5,7 +5,7 @@ const baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api';
 export const api = axios.create({ baseURL });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('grofin_token');
+  const token = localStorage.getItem('esena_token');
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;

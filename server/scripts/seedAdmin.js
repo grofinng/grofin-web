@@ -5,7 +5,7 @@ const User = require('../models/User');
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@grofin.ng').toLowerCase();
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'GroFinAdmin@2026';
-const ADMIN_FIRST = process.env.ADMIN_FIRST_NAME || 'GroFin';
+const ADMIN_FIRST = process.env.ADMIN_FIRST_NAME || 'Esena';
 const ADMIN_SURNAME = process.env.ADMIN_SURNAME || 'Admin';
 
 (async () => {

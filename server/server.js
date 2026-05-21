@@ -23,7 +23,7 @@ if (!isServerless) {
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 }
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'grofin-api' }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'esena-africa-api' }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/applications', applicationRoutes);
@@ -41,6 +41,6 @@ module.exports = app;
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   connectDB().then(() => {
-    app.listen(PORT, () => console.log(`GroFin API listening on :${PORT}`));
+    app.listen(PORT, () => console.log(`Esena Africa API listening on :${PORT}`));
   });
 }

@@ -40,7 +40,7 @@ export function Login() {
       <div className="auth-card">
         <div className="auth-header">
           <h1 style={{ fontSize: '1.5rem' }}>Welcome back</h1>
-          <p>Sign in to continue your GroFin application.</p>
+          <p>Sign in to continue your Esena Africa application.</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}
@@ -74,7 +74,7 @@ export function Login() {
         </form>
 
         <div className="auth-footer">
-          New to GroFin? <Link to="/signup">Create an account</Link>
+          New to Esena Africa? <Link to="/signup">Create an account</Link>
         </div>
       </div>
     </div>

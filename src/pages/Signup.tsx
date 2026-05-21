@@ -49,7 +49,7 @@ export function Signup() {
         password: form.password,
       });
       emailNotifications.registration({ email: user.email, firstName: user.firstName });
-      toast.success('Account created — welcome to GroFin');
+      toast.success('Account created — welcome to Esena Africa');
       navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(extractApiError(err, 'Could not create account'));

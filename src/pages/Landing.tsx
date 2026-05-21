@@ -5,6 +5,7 @@ export function Landing() {
   const { user } = useAuth();
   const ctaTo = user ? '/apply' : '/signup';
   const ctaLabel = user ? 'Apply for Food' : 'Get started';
+  const customerName = user ? `${user.firstName} ${user.surname}` : 'Amaka Okafor';
 
   return (
     <>
@@ -14,7 +15,7 @@ export function Landing() {
             <span className="hero-tag">Lagos-based fintech</span>
             <h1>Get what you need, when you need it.</h1>
             <p style={{ fontSize: '1.05rem', maxWidth: 540 }}>
-              GroFin makes everyday essentials easier to afford. We focus on what truly matters:
+              Esena Africa makes everyday essentials easier to afford. We focus on what truly matters:
               your well-being and daily living — groceries, medications, and more.
             </p>
             <div className="hero-cta">
@@ -28,14 +29,25 @@ export function Landing() {
           </div>
 
           <div className="hero-art">
-            <div>
-              <div className="hero-art-label">Sample loan</div>
-              <div className="hero-art-amount">₦150,000</div>
+            <div className="hero-art-head">
+              <div>
+                <div className="hero-art-label">Sample loan</div>
+                <div className="hero-art-amount">₦150,000</div>
+              </div>
+              <span className="hero-art-badge">
+                <img src="/Esena-logo.jpeg" alt="Esena Africa" />
+              </span>
             </div>
-            <div style={{ display: 'grid', gap: '0.5rem' }}>
+
+            <div>
+              <div className="hero-art-label">Customer</div>
+              <div className="hero-art-name">{customerName}</div>
+            </div>
+
+            <div className="hero-art-rows">
               <Row label="Groceries" value="₦90,000" />
               <Row label="Medications" value="₦60,000" />
-              <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.25)' }} />
+              <hr className="hero-art-divider" />
               <Row label="Status" value="Approved" emphasis />
             </div>
           </div>

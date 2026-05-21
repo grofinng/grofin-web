@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: grofin-api
+    name: esena-africa-api
     runtime: node
     rootDir: server
     plan: starter

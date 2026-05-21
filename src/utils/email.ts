@@ -10,7 +10,7 @@ const TEMPLATES = {
   adminReceived: process.env.REACT_APP_EMAILJS_TEMPLATE_ADMIN_RECEIVED || '',
 };
 
-const COMPANY_EMAIL = process.env.REACT_APP_GROFIN_EMAIL || 'grofinng@gmail.com';
+const COMPANY_EMAIL = process.env.REACT_APP_ESENA_EMAIL || 'grofinng@gmail.com';
 
 function configured(template: string) {
   return SERVICE_ID && PUBLIC_KEY && template;
@@ -18,13 +18,13 @@ function configured(template: string) {
 
 async function send(template: string, params: Record<string, unknown>) {
   if (!configured(template)) {
-    console.info('[GroFin] EmailJS not configured — skipping email', { template, params });
+    console.info('[Esena Africa] EmailJS not configured — skipping email', { template, params });
     return null;
   }
   try {
     return await emailjs.send(SERVICE_ID, template, params, { publicKey: PUBLIC_KEY });
   } catch (err) {
-    console.error('[GroFin] EmailJS send failed', err);
+    console.error('[Esena Africa] EmailJS send failed', err);
     return null;
   }
 }
@@ -35,8 +35,8 @@ export const emailNotifications = {
       to_email: to.email,
       to_name: to.firstName,
       from_email: COMPANY_EMAIL,
-      subject: 'Welcome to GroFin',
-      message: `Hi ${to.firstName}, welcome to GroFin. Your account is ready — you can now apply for support with your everyday essentials.`,
+      subject: 'Welcome to Esena Africa',
+      message: `Hi ${to.firstName}, welcome to Esena Africa. Your account is ready — you can now apply for support with your everyday essentials.`,
     }),
 
   applicationReceived: (to: { email: string; firstName: string; loanAmount: number; applicationId: string }) =>
@@ -44,7 +44,7 @@ export const emailNotifications = {
       to_email: to.email,
       to_name: to.firstName,
       from_email: COMPANY_EMAIL,
-      subject: 'GroFin — Application received',
+      subject: 'Esena Africa — Application received',
       reference: to.applicationId,
       loan_amount: to.loanAmount.toLocaleString(),
       message: `Hi ${to.firstName}, we've received your loan application for ₦${to.loanAmount.toLocaleString()} (ref ${to.applicationId}). It is now being processed.`,
@@ -55,10 +55,10 @@ export const emailNotifications = {
       to_email: to.email,
       to_name: to.firstName,
       from_email: COMPANY_EMAIL,
-      subject: 'GroFin — Application approved',
+      subject: 'Esena Africa — Application approved',
       reference: to.applicationId,
       loan_amount: to.loanAmount.toLocaleString(),
-      message: `Great news ${to.firstName}! Your GroFin application (ref ${to.applicationId}) for ₦${to.loanAmount.toLocaleString()} has been approved.`,
+      message: `Great news ${to.firstName}! Your Esena Africa application (ref ${to.applicationId}) for ₦${to.loanAmount.toLocaleString()} has been approved.`,
     }),
 
   applicationRejected: (to: {
@@ -73,13 +73,13 @@ export const emailNotifications = {
       to_email: to.email,
       to_name: to.firstName,
       from_email: COMPANY_EMAIL,
-      subject: 'GroFin — Application not approved',
+      subject: 'Esena Africa — Application not approved',
       reference: to.applicationId,
       loan_amount: to.loanAmount.toLocaleString(),
       reason: to.reason,
       can_edit: to.canEdit ? 'yes' : 'no',
       message:
-        `Hi ${to.firstName}, your GroFin application (ref ${to.applicationId}) for ₦${to.loanAmount.toLocaleString()} was not approved. Reason: ${to.reason}.` +
+        `Hi ${to.firstName}, your Esena Africa application (ref ${to.applicationId}) for ₦${to.loanAmount.toLocaleString()} was not approved. Reason: ${to.reason}.` +
         (to.canEdit
           ? ' You can update your application and resubmit it from the My Applications page.'
           : ' If you have questions, please reply to this email.'),
@@ -97,11 +97,11 @@ export const emailNotifications = {
       to_email: to.email,
       to_name: to.firstName,
       from_email: COMPANY_EMAIL,
-      subject: `GroFin — New loan application from ${to.applicantName}`,
+      subject: `Esena Africa — New loan application from ${to.applicantName}`,
       reference: to.applicationId,
       loan_amount: to.loanAmount.toLocaleString(),
       applicant_name: to.applicantName,
       applicant_email: to.applicantEmail,
-      message: `New loan application: ${to.applicantName} (${to.applicantEmail}) requested ₦${to.loanAmount.toLocaleString()}. Ref ${to.applicationId}. Review it in the GroFin admin dashboard.`,
+      message: `New loan application: ${to.applicantName} (${to.applicantEmail}) requested ₦${to.loanAmount.toLocaleString()}. Ref ${to.applicationId}. Review it in the Esena Africa admin dashboard.`,
     }),
 };

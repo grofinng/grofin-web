@@ -14,7 +14,7 @@ export function Navbar() {
   return (
     <nav className="navbar">
       <div className="container navbar-inner">
-        <Link to="/" aria-label="GroFin home">
+        <Link to="/" aria-label="Esena Africa home">
           <Logo />
         </Link>
         <div className="navbar-links">

@@ -71,7 +71,7 @@ export function Applications() {
       <div className="page-header">
         <div className="page-title">
           <h1>My applications</h1>
-          <p>Track the status of every application you've submitted with GroFin.</p>
+          <p>Track the status of every application you've submitted with Esena Africa.</p>
         </div>
         <Link to="/apply" className="btn">New application</Link>
       </div>
@@ -105,7 +105,7 @@ export function Applications() {
           <h3>{apps.length === 0 ? 'No applications yet' : 'Nothing matches that filter'}</h3>
           <p>
             {apps.length === 0
-              ? 'Start your first GroFin application — it only takes a few minutes.'
+              ? 'Start your first Esena Africa application — it only takes a few minutes.'
               : 'Try a different filter or start a new application.'}
           </p>
           {apps.length === 0 && (
@@ -205,7 +205,7 @@ function ApplicationCard({ application: a }: { application: Application }) {
           )}
           {isRejected && !canEdit && (
             <div style={{ marginTop: '0.4rem' }}>
-              This application is closed for edits. Reach out to GroFin support if you'd like to start a new one.
+              This application is closed for edits. Reach out to Esena Africa support if you'd like to start a new one.
             </div>
           )}
         </div>

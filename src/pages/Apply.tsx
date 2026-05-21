@@ -736,7 +736,7 @@ function LoanStep({
                     </div>
                     {list.length === 0 ? (
                       <div className="alert alert-info" style={{ marginBottom: 0 }}>
-                        No active {category.toLowerCase()} partners yet. Contact GroFin support.
+                        No active {category.toLowerCase()} partners yet. Contact Esena Africa support.
                       </div>
                     ) : (
                       <select
@@ -813,7 +813,7 @@ function ReviewStep({ form, update, errors, breakdownTotal, loanAmountNum }: Rev
             onChange={(e) => update('termsAccepted', e.target.checked)}
           />
           <span>
-            I confirm the information is accurate and I accept GroFin's Terms and Conditions.
+            I confirm the information is accurate and I accept Esena Africa's Terms and Conditions.
           </span>
         </label>
         {errors.termsAccepted && <span className="field-error">{errors.termsAccepted}</span>}

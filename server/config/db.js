@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const cache = global.__grofin_mongo || (global.__grofin_mongo = { conn: null, promise: null });
+const cache = global.__esena_mongo || (global.__esena_mongo = { conn: null, promise: null });
 
 async function connectDB() {
   if (cache.conn) return cache.conn;
