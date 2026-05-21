@@ -55,6 +55,48 @@ router.get('/me', protect, async (req, res) => {
   res.json({ user: req.user.toSafe() });
 });
 
+router.patch('/profile', protect, async (req, res, next) => {
+  try {
+    const { firstName, surname, email, nin } = req.body;
+    const user = req.user;
+
+    if (firstName !== undefined) {
+      if (!String(firstName).trim()) {
+        return res.status(400).json({ message: 'First name is required' });
+      }
+      user.firstName = String(firstName).trim();
+    }
+    if (surname !== undefined) {
+      if (!String(surname).trim()) {
+        return res.status(400).json({ message: 'Surname is required' });
+      }
+      user.surname = String(surname).trim();
+    }
+    if (email !== undefined) {
+      const next = String(email).trim().toLowerCase();
+      if (!/^\S+@\S+\.\S+$/.test(next)) {
+        return res.status(400).json({ message: 'Enter a valid email' });
+      }
+      if (next !== user.email) {
+        const taken = await User.findOne({ email: next, _id: { $ne: user._id } });
+        if (taken) return res.status(409).json({ message: 'Email already in use' });
+        user.email = next;
+      }
+    }
+    if (nin !== undefined && user.role === 'user') {
+      if (!/^\d{11}$/.test(String(nin))) {
+        return res.status(400).json({ message: 'NIN must be 11 digits' });
+      }
+      user.nin = String(nin);
+    }
+
+    await user.save();
+    res.json({ user: user.toSafe() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/change-password', protect, async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;

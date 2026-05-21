@@ -8,6 +8,7 @@ interface AuthContextValue {
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   register: (data: { firstName: string; surname: string; email: string; password: string; nin: string }) => Promise<User>;
+  updateUser: (user: User) => void;
   logout: () => void;
 }
 
@@ -75,6 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist]
   );
 
+  const updateUser = useCallback((nextUser: User) => {
+    localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+    setUser(nextUser);
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
@@ -83,8 +89,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, token, loading, login, register, logout }),
-    [user, token, loading, login, register, logout]
+    () => ({ user, token, loading, login, register, updateUser, logout }),
+    [user, token, loading, login, register, updateUser, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

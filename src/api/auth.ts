@@ -9,4 +9,6 @@ export const authApi = {
   me: () => api.get<{ user: User }>('/auth/me').then((r) => r.data),
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     api.post<{ ok: boolean }>('/auth/change-password', data).then((r) => r.data),
+  updateProfile: (data: { firstName?: string; surname?: string; email?: string; nin?: string }) =>
+    api.patch<{ user: User }>('/auth/profile', data).then((r) => r.data.user),
 };

@@ -589,3 +589,5 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
   font-size: 0.85rem;
 }
 .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+.footer-copy { display: flex; align-items: center; gap: 0.5rem; }
+.footer-mark { width: 22px; height: 22px; border-radius: 6px; display: block; }
