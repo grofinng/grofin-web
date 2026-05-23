@@ -1,11 +1,28 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { impactStatsApi } from '../api/impactStats';
+import { ImpactStat } from '../types';
+import { StatIcon } from '../components/StatIcon';
 
 export function Landing() {
   const { user } = useAuth();
   const ctaTo = user ? '/apply' : '/signup';
   const ctaLabel = user ? 'Apply for Food' : 'Get started';
   const customerName = user ? `${user.firstName} ${user.surname}` : 'Amaka Okafor';
+  const isStaff = user?.role === 'admin' || user?.role === 'manager';
+
+  const [stats, setStats] = useState<ImpactStat[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    impactStatsApi
+      .list()
+      .then((list) => !cancelled && setStats(list))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
@@ -72,13 +89,39 @@ export function Landing() {
         />
       </section>
 
-      <section className="container" style={{ padding: '1rem 1.25rem 3rem' }}>
-        <div className="card" style={{ textAlign: 'center' }}>
-          <h2>Ready to apply?</h2>
-          <p>Create an account and submit your loan request — it only takes a few minutes.</p>
-          <Link to={ctaTo} className="btn">{ctaLabel}</Link>
-        </div>
-      </section>
+      {stats.length > 0 && (
+        <section className="container impact-section">
+          <h2 className="impact-title">Our impact so far</h2>
+          <div className="impact-grid">
+            {stats.map((s) => (
+              <div className="impact-card" key={s._id}>
+                <div className="impact-icon" aria-hidden="true">
+                  <StatIcon icon={s.icon} />
+                </div>
+                <div>
+                  <div className="impact-value">{s.value}</div>
+                  <div className="impact-label">{s.label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!isStaff && (
+        <section className="container landing-extras">
+          <div className="card extra-card">
+            <h3>Have a question?</h3>
+            <p>Send a message and our team will get back to you by email.</p>
+            <Link to="/contact" className="btn btn-secondary">Contact us</Link>
+          </div>
+          <div className="card extra-card">
+            <h3>Run a pharmacy or grocery store?</h3>
+            <p>Apply to partner with Esena Africa and serve our customers.</p>
+            <Link to="/partner" className="btn btn-secondary">Partner with us</Link>
+          </div>
+        </section>
+      )}
     </>
   );
 }

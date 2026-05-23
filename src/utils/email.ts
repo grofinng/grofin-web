@@ -8,6 +8,7 @@ const TEMPLATES = {
   approved: process.env.REACT_APP_EMAILJS_TEMPLATE_APPROVED || '',
   rejected: process.env.REACT_APP_EMAILJS_TEMPLATE_REJECTED || '',
   adminReceived: process.env.REACT_APP_EMAILJS_TEMPLATE_ADMIN_RECEIVED || '',
+  contact: process.env.REACT_APP_EMAILJS_TEMPLATE_CONTACT || '',
 };
 
 const COMPANY_EMAIL = process.env.REACT_APP_ESENA_EMAIL || 'grofinng@gmail.com';
@@ -83,6 +84,24 @@ export const emailNotifications = {
         (to.canEdit
           ? ' You can update your application and resubmit it from the My Applications page.'
           : ' If you have questions, please reply to this email.'),
+    }),
+
+  contactUs: (from: {
+    name: string;
+    email: string;
+    phone?: string;
+    subject?: string;
+    message: string;
+  }) =>
+    send(TEMPLATES.contact, {
+      to_email: COMPANY_EMAIL,
+      to_name: 'Esena Africa',
+      from_name: from.name,
+      from_email: from.email,
+      reply_to: from.email,
+      phone: from.phone || '—',
+      subject: from.subject || 'Contact form enquiry',
+      message: `From ${from.name} <${from.email}>${from.phone ? ` · ${from.phone}` : ''}\n\n${from.message}`,
     }),
 
   applicationReceivedAdmin: (to: {

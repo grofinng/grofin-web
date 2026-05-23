@@ -7,6 +7,9 @@ const authRoutes = require('./routes/auth');
 const applicationRoutes = require('./routes/applications');
 const userRoutes = require('./routes/users');
 const vendorRoutes = require('./routes/vendors');
+const vendorRequestRoutes = require('./routes/vendorRequests');
+const contactRequestRoutes = require('./routes/contactRequests');
+const impactStatRoutes = require('./routes/impactStats');
 
 const app = express();
 
@@ -29,6 +32,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/vendor-requests', vendorRequestRoutes);
+app.use('/api/contact-requests', contactRequestRoutes);
+app.use('/api/impact-stats', impactStatRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

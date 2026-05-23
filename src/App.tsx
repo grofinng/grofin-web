@@ -15,7 +15,11 @@ import { Applications } from './pages/Applications';
 import { Admin } from './pages/Admin';
 import { AdminUsers } from './pages/AdminUsers';
 import { AdminVendors } from './pages/AdminVendors';
+import { AdminVendorRequests } from './pages/AdminVendorRequests';
+import { AdminImpactStats } from './pages/AdminImpactStats';
 import { Account } from './pages/Account';
+import { Contact } from './pages/Contact';
+import { Partner } from './pages/Partner';
 
 function GuestOnly({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -31,6 +35,8 @@ function AppRoutes() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/partner" element={<Partner />} />
           <Route path="/login" element={<GuestOnly><Login /></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
           <Route
@@ -86,6 +92,22 @@ function AppRoutes() {
             element={
               <AdminRoute>
                 <AdminVendors />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/vendor-requests"
+            element={
+              <AdminRoute>
+                <AdminVendorRequests />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/stats"
+            element={
+              <AdminRoute>
+                <AdminImpactStats />
               </AdminRoute>
             }
           />

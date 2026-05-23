@@ -117,3 +117,52 @@ export interface Application {
 export interface ApiError {
   message: string;
 }
+
+export type VendorRequestStatus = 'pending' | 'approved' | 'rejected';
+export type ContactRequestStatus = 'pending' | 'resolved';
+
+export type StatIcon = 'chart' | 'box' | 'trending' | 'meal' | 'naira' | 'users' | 'home' | 'leaf';
+export const STAT_ICONS: StatIcon[] = ['chart', 'box', 'trending', 'meal', 'naira', 'users', 'home', 'leaf'];
+
+export interface ImpactStat {
+  _id: string;
+  key: string;
+  label: string;
+  value: string;
+  icon: StatIcon;
+  order: number;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ContactRequest {
+  _id: string;
+  name: string;
+  email: string;
+  phone: string;
+  subject: string;
+  message: string;
+  status: ContactRequestStatus;
+  adminNote: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VendorRequest {
+  _id: string;
+  businessName: string;
+  address: string;
+  area: string;
+  category: VendorCategory;
+  contactPhone: string;
+  ownerName: string;
+  ownerPhone: string;
+  ownerEmail: string;
+  notes: string;
+  status: VendorRequestStatus;
+  adminNote: string;
+  approvedVendor?: { _id: string; partnerCode: string; businessName: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}

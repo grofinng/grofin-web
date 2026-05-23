@@ -33,6 +33,8 @@ export function Navbar() {
               {user.role === 'admin' && (
                 <>
                   <NavLink to="/admin/vendors">Vendors</NavLink>
+                  <NavLink to="/admin/vendor-requests">Requests</NavLink>
+                  <NavLink to="/admin/stats">Stats</NavLink>
                   <NavLink to="/admin/users">Team</NavLink>
                 </>
               )}
@@ -48,6 +50,7 @@ export function Navbar() {
             <>
               <NavLink to="/login">Sign in</NavLink>
               <Link to="/signup" className="btn">Get started</Link>
+              <Link to="/partner" className="btn btn-secondary">Partner with us</Link>
             </>
           )}
         </div>
