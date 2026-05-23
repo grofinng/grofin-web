@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { impactStatsApi } from '../api/impactStats';
 import { ImpactStat } from '../types';
 import { StatIcon } from '../components/StatIcon';
+import { useScrollReveal } from '../hooks/useScrollReveal';
 
 export function Landing() {
   const { user } = useAuth();
@@ -23,6 +24,8 @@ export function Landing() {
       cancelled = true;
     };
   }, []);
+
+  useScrollReveal(stats);
 
   return (
     <>
@@ -71,19 +74,22 @@ export function Landing() {
         </div>
       </section>
       <section className="container features">
-        <h2 className="section-heading">How it works</h2>
+        <h2 className="section-heading reveal">How it works</h2>
         <Feature
           n="1"
+          delayClass="reveal-1"
           title="Apply in Minutes"
           body="Enter your details and get instant eligibility check. We use simple, modern checks to approve eligible customers quickly."
         />
         <Feature
           n="2"
+          delayClass="reveal-2"
           title="Shop at Partner Stores"
           body="Select groceries or medication from approved vendors. We focus on what matters: your health and your home."
         />
         <Feature
           n="3"
+          delayClass="reveal-3"
           title="Pay Later Easily"
           body="We pay the store instantly, you repay on your own schedule. Flexible repayment designed for real life in Nigeria"
         />
@@ -91,11 +97,11 @@ export function Landing() {
 
       {stats.length > 0 && (
         <section className="container impact-section">
-          <h2 className="section-heading">Our impact so far</h2>
+          <h2 className="section-heading reveal">Our impact so far</h2>
           <div className="impact-grid">
             {chunk(stats, 2).map((pair, i) => (
               <div
-                className={`impact-card-grouped ${i === 0 ? 'green' : 'plain'}`}
+                className={`impact-card-grouped ${i === 0 ? 'green' : 'plain'} reveal reveal-${Math.min(i + 1, 4)}`}
                 key={pair.map((s) => s._id).join('|')}
               >
                 {pair.map((s, j) => (
@@ -120,13 +126,13 @@ export function Landing() {
 
       {!isStaff && (
         <section className="container landing-extras">
-          <h2 className="section-heading">Get in touch</h2>
-          <div className="card extra-card">
+          <h2 className="section-heading reveal">Get in touch</h2>
+          <div className="card extra-card reveal reveal-1">
             <h3>Have a question?</h3>
             <p>Send a message and our team will get back to you by email.</p>
             <Link to="/contact" className="btn btn-secondary">Contact us</Link>
           </div>
-          <div className="card extra-card">
+          <div className="card extra-card reveal reveal-2">
             <h3>Run a pharmacy or grocery store?</h3>
             <p>Apply to partner with Esena Africa and serve our customers.</p>
             <Link to="/partner" className="btn btn-secondary">Partner with us</Link>
@@ -152,9 +158,19 @@ function Row({ label, value, emphasis }: { label: string; value: string; emphasi
   );
 }
 
-function Feature({ n, title, body }: { n: string; title: string; body: string }) {
+function Feature({
+  n,
+  title,
+  body,
+  delayClass = '',
+}: {
+  n: string;
+  title: string;
+  body: string;
+  delayClass?: string;
+}) {
   return (
-    <div className="feature">
+    <div className={`feature reveal ${delayClass}`.trim()}>
       <div className="feature-icon">{n}</div>
       <h3>{title}</h3>
       <p style={{ marginBottom: 0 }}>{body}</p>

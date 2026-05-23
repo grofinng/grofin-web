@@ -24,6 +24,64 @@
 
 .app-main { min-height: calc(100vh - 64px - 70px); }
 
+/* ---------- Animations ---------- */
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes floatY {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes shimmer {
+  0%   { background-position: -120% 0; }
+  100% { background-position: 220% 0; }
+}
+
+/* Hero entrance — runs on page mount */
+.hero .hero-tag        { animation: slideUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: 0.00s; }
+.hero h1               { animation: slideUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: 0.08s; }
+.hero .container > div:first-child > p { animation: slideUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: 0.16s; }
+.hero-cta              { animation: slideUp 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: 0.24s; }
+.hero-art              { animation: scaleIn 0.75s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: 0.18s; }
+.hero-art-badge        { animation: floatY 5.5s ease-in-out infinite; animation-delay: 1s; }
+
+/* Scroll-reveal — pair with the useScrollReveal() hook */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  will-change: transform, opacity;
+  transition:
+    opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) var(--reveal-delay, 0ms),
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) var(--reveal-delay, 0ms);
+}
+.reveal.in-view { opacity: 1; transform: none; }
+
+.reveal-1 { --reveal-delay: 0ms; }
+.reveal-2 { --reveal-delay: 90ms; }
+.reveal-3 { --reveal-delay: 180ms; }
+.reveal-4 { --reveal-delay: 270ms; }
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .hero .hero-tag,
+  .hero h1,
+  .hero .container > div:first-child > p,
+  .hero-cta,
+  .hero-art,
+  .hero-art-badge,
+  .reveal {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 /* Standalone brand logo (badge + wordmark in one image) */
 .brand-logo {
   height: 50px;
@@ -60,7 +118,11 @@ p { color: var(--gf-muted); line-height: 1.55; margin: 0 0 1rem; }
   border: 1px solid var(--gf-border);
   box-shadow: var(--gf-shadow);
   padding: 1.5rem;
+  transition: box-shadow 0.25s ease, transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
+.extra-card:hover { box-shadow: var(--gf-shadow-lg); transform: translateY(-2px); }
+.feature { transition: box-shadow 0.25s ease, transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.feature:hover { box-shadow: var(--gf-shadow-lg); transform: translateY(-2px); }
 
 .btn {
   display: inline-flex;
@@ -75,25 +137,42 @@ p { color: var(--gf-muted); line-height: 1.55; margin: 0 0 1rem; }
   border-radius: var(--gf-radius-sm);
   padding: 0.75rem 1.25rem;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.05s ease;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.15s cubic-bezier(0.2, 0.7, 0.2, 1), box-shadow 0.2s ease;
+  box-shadow: 0 2px 6px rgba(15, 58, 37, 0.10);
 }
-.btn:hover:not(:disabled) { background: var(--gf-green-600); }
-.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:hover:not(:disabled) {
+  background: var(--gf-green-600);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(31, 107, 63, 0.22);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 10px rgba(31, 107, 63, 0.15);
+}
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .btn-secondary {
   background: transparent;
   color: var(--gf-green-700);
   border: 1px solid var(--gf-green-700);
+  box-shadow: none;
 }
-.btn-secondary:hover:not(:disabled) { background: var(--gf-green-100); color: var(--gf-green-900); }
+.btn-secondary:hover:not(:disabled) {
+  background: var(--gf-green-100);
+  color: var(--gf-green-900);
+  box-shadow: 0 6px 16px rgba(15, 58, 37, 0.08);
+}
 
 .btn-ghost {
   background: transparent;
   color: var(--gf-ink);
   border: 1px solid var(--gf-border);
+  box-shadow: none;
 }
-.btn-ghost:hover:not(:disabled) { background: #f3f6f4; }
+.btn-ghost:hover:not(:disabled) {
+  background: #f3f6f4;
+  box-shadow: 0 4px 10px rgba(15, 58, 37, 0.06);
+}
 
 .btn-block { width: 100%; }
 
