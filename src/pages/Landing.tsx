@@ -93,15 +93,25 @@ export function Landing() {
         <section className="container impact-section">
           <h2 className="section-heading">Our impact so far</h2>
           <div className="impact-grid">
-            {stats.map((s) => (
-              <div className="impact-card" key={s._id}>
-                <div className="impact-icon" aria-hidden="true">
-                  <StatIcon icon={s.icon} />
-                </div>
-                <div>
-                  <div className="impact-value">{s.value}</div>
-                  <div className="impact-label">{s.label}</div>
-                </div>
+            {chunk(stats, 2).map((pair, i) => (
+              <div
+                className={`impact-card-grouped ${i === 0 ? 'green' : 'plain'}`}
+                key={pair.map((s) => s._id).join('|')}
+              >
+                {pair.map((s, j) => (
+                  <div key={s._id}>
+                    <div className="impact-row">
+                      <span className="impact-icon-chip" aria-hidden="true">
+                        <StatIcon icon={s.icon} size={22} />
+                      </span>
+                      <div>
+                        <div className="impact-value">{s.value}</div>
+                        <div className="impact-label">{s.label}</div>
+                      </div>
+                    </div>
+                    {j < pair.length - 1 && <hr className="impact-row-divider" />}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -110,6 +120,7 @@ export function Landing() {
 
       {!isStaff && (
         <section className="container landing-extras">
+          <h2 className="section-heading">Get in touch</h2>
           <div className="card extra-card">
             <h3>Have a question?</h3>
             <p>Send a message and our team will get back to you by email.</p>
@@ -124,6 +135,12 @@ export function Landing() {
       )}
     </>
   );
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 function Row({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {

@@ -337,27 +337,81 @@ textarea { resize: vertical; min-height: 90px; }
 }
 .impact-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 1rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
 }
-@media (max-width: 880px) { .impact-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 520px) { .impact-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .impact-grid { grid-template-columns: 1fr; } }
 
-.impact-card {
-  background: #fff;
-  border: 1px solid var(--gf-border);
-  border-radius: var(--gf-radius);
-  box-shadow: var(--gf-shadow);
-  padding: 1.25rem;
+.impact-card-grouped {
+  border-radius: 22px;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 14px 40px rgba(15, 58, 37, 0.1);
   display: flex;
-  align-items: center;
-  gap: 0.85rem;
+  flex-direction: column;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.impact-card:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--gf-shadow-lg);
+.impact-card-grouped:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 18px 48px rgba(15, 58, 37, 0.15);
 }
+.impact-card-grouped.green {
+  background: linear-gradient(135deg, var(--gf-green-600), var(--gf-green-500));
+  color: #fff;
+}
+.impact-card-grouped.plain {
+  background: #fff;
+  color: var(--gf-ink);
+  border: 1px solid var(--gf-border);
+}
+
+.impact-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 0;
+}
+
+.impact-icon-chip {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.impact-card-grouped.green .impact-icon-chip {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+.impact-card-grouped.plain .impact-icon-chip {
+  background: var(--gf-green-100);
+  color: var(--gf-green-700);
+}
+
+.impact-value {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.impact-label {
+  font-size: 0.95rem;
+  margin-top: 0.15rem;
+}
+.impact-card-grouped.green .impact-label { opacity: 0.92; }
+.impact-card-grouped.plain .impact-label { color: var(--gf-muted); }
+.impact-card-grouped.plain .impact-value { color: var(--gf-green-900); }
+
+.impact-row-divider {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  margin: 0;
+}
+.impact-card-grouped.plain .impact-row-divider {
+  border-top-color: var(--gf-border);
+}
+
+/* Keep .impact-icon for the admin preview chip */
 .impact-icon {
   width: 44px;
   height: 44px;
@@ -367,18 +421,6 @@ textarea { resize: vertical; min-height: 90px; }
   display: grid;
   place-items: center;
   flex-shrink: 0;
-}
-.impact-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  color: var(--gf-green-900);
-}
-.impact-label {
-  font-size: 0.88rem;
-  color: var(--gf-muted);
-  margin-top: 0.1rem;
 }
 
 .landing-extras {
