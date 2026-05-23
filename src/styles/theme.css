@@ -22,7 +22,10 @@
 
 * { box-sizing: border-box; }
 
-.app-main { min-height: calc(100vh - 64px - 70px); }
+.app-main {
+  min-height: calc(100vh - 64px - 70px);
+  padding-top: 64px; /* matches the fixed navbar height */
+}
 
 /* ---------- Animations ---------- */
 @keyframes slideUp {
@@ -394,13 +397,14 @@ textarea { resize: vertical; min-height: 90px; }
 
 /* Navbar */
 .navbar {
-  position: -webkit-sticky;
-  position: sticky;
+  position: fixed;
   top: 0;
-  z-index: 30;
-  background: #ffffffd9;
-  -webkit-backdrop-filter: saturate(150%) blur(10px);
-  backdrop-filter: saturate(150%) blur(10px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+  backdrop-filter: saturate(160%) blur(12px);
   border-bottom: 1px solid var(--gf-border);
 }
 .navbar-inner {
