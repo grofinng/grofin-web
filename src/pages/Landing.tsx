@@ -70,8 +70,8 @@ export function Landing() {
           </div>
         </div>
       </section>
-
       <section className="container features">
+        <h2 className="section-heading">How it works</h2>
         <Feature
           n="1"
           title="Apply in Minutes"
@@ -91,7 +91,7 @@ export function Landing() {
 
       {stats.length > 0 && (
         <section className="container impact-section">
-          <h2 className="impact-title">Our impact so far</h2>
+          <h2 className="section-heading">Our impact so far</h2>
           <div className="impact-grid">
             {stats.map((s) => (
               <div className="impact-card" key={s._id}>
