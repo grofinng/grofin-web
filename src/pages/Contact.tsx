@@ -55,8 +55,7 @@ export function Contact() {
         <h1>Contact us</h1>
         <p>
           Questions, feedback, or need help with an application? Send us a note and the team will reply
-          by email. You can also email{' '}
-          <a href="mailto:grofinng@gmail.com">grofinng@gmail.com</a> directly.
+          by email.
         </p>
       </div>
 

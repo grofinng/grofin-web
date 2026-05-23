@@ -6,9 +6,9 @@ export function Footer() {
           <img src="/esena-favicon.jpeg" alt="Esena Africa" className="footer-mark" />
           <span>© {new Date().getFullYear()} Esena Africa. Lagos, Nigeria.</span>
         </div>
-        <div>
+        {/* <div>
           <a href="mailto:grofinng@gmail.com">grofinng@gmail.com</a>
-        </div>
+        </div> */}
       </div>
     </footer>
   );

@@ -1,10 +1,22 @@
-import { useEffect, useState } from 'react';
+import { CSSProperties, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { impactStatsApi } from '../api/impactStats';
 import { ImpactStat } from '../types';
 import { StatIcon } from '../components/StatIcon';
+import { CountUp } from '../components/CountUp';
 import { useScrollReveal } from '../hooks/useScrollReveal';
+import { useParallax } from '../hooks/useParallax';
+import { useCursorGlow } from '../hooks/useCursorGlow';
+
+const HERO_HEADING = 'Get what you need, when you need it.';
+
+interface SampleCard {
+  customer: string;
+  amount: number;
+  rows: { label: string; value: number }[];
+  status: string;
+}
 
 export function Landing() {
   const { user } = useAuth();
@@ -26,14 +38,73 @@ export function Landing() {
   }, []);
 
   useScrollReveal(stats);
+  useParallax();
+  useCursorGlow();
+
+  const sampleCards: SampleCard[] = useMemo(
+    () => [
+      {
+        customer: customerName,
+        amount: 150000,
+        rows: [
+          { label: 'Groceries', value: 90000 },
+          { label: 'Medications', value: 60000 },
+        ],
+        status: 'Approved',
+      },
+      {
+        customer: 'Tunde Bello',
+        amount: 80000,
+        rows: [{ label: 'Groceries', value: 80000 }],
+        status: 'Approved',
+      },
+      {
+        customer: 'Chinonso Eze',
+        amount: 250000,
+        rows: [
+          { label: 'Groceries', value: 150000 },
+          { label: 'Medications', value: 100000 },
+        ],
+        status: 'Processing',
+      },
+      {
+        customer: 'Adunni Lawal',
+        amount: 45000,
+        rows: [{ label: 'Medications', value: 45000 }],
+        status: 'Approved',
+      },
+    ],
+    [customerName]
+  );
+
+  const [cardIndex, setCardIndex] = useState(0);
+  useEffect(() => {
+    const total = sampleCards.length;
+    const id = window.setInterval(() => setCardIndex((i) => (i + 1) % total), 4500);
+    return () => clearInterval(id);
+  }, [sampleCards.length]);
+
+  const current = sampleCards[cardIndex];
 
   return (
     <>
       <section className="hero">
+        <div className="hero-mesh" data-parallax="0.18" aria-hidden="true" />
+        <div className="hero-mesh hero-mesh-2" data-parallax="-0.10" aria-hidden="true" />
         <div className="container hero-grid">
           <div>
             <span className="hero-tag">Lagos-based fintech</span>
-            <h1>Get what you need, when you need it.</h1>
+            <h1 className="hero-h1">
+              {HERO_HEADING.split(' ').map((w, i) => (
+                <span
+                  key={i}
+                  className="hero-word"
+                  style={{ ['--word-delay' as string]: `${i * 70}ms` } as CSSProperties}
+                >
+                  {w}{' '}
+                </span>
+              ))}
+            </h1>
             <p style={{ fontSize: '1.05rem', maxWidth: 540 }}>
               Esena Africa makes everyday essentials easier to afford. We focus on what truly matters:
               your well-being and daily living — groceries, medications, and more.
@@ -49,50 +120,69 @@ export function Landing() {
           </div>
 
           <div className="hero-art">
-            <div className="hero-art-head">
-              <div>
-                <div className="hero-art-label">Sample loan</div>
-                <div className="hero-art-amount">₦150,000</div>
+            <div key={cardIndex} className="hero-art-slide">
+              <div className="hero-art-head">
+                <div>
+                  <div className="hero-art-label">Sample loan</div>
+                  <div className="hero-art-amount">₦{current.amount.toLocaleString()}</div>
+                </div>
+                <span className="hero-art-badge">
+                  <img src="/Esena-logo.jpeg" alt="Esena Africa" />
+                </span>
               </div>
-              <span className="hero-art-badge">
-                <img src="/Esena-logo.jpeg" alt="Esena Africa" />
-              </span>
-            </div>
 
-            <div>
-              <div className="hero-art-label">Customer</div>
-              <div className="hero-art-name">{customerName}</div>
-            </div>
+              <div>
+                <div className="hero-art-label">Customer</div>
+                <div className="hero-art-name">{current.customer}</div>
+              </div>
 
-            <div className="hero-art-rows">
-              <Row label="Groceries" value="₦90,000" />
-              <Row label="Medications" value="₦60,000" />
-              <hr className="hero-art-divider" />
-              <Row label="Status" value="Approved" emphasis />
+              <div className="hero-art-rows">
+                {current.rows.map((r, i) => (
+                  <Row key={i} label={r.label} value={`₦${r.value.toLocaleString()}`} />
+                ))}
+                <hr className="hero-art-divider" />
+                <Row label="Status" value={current.status} emphasis />
+              </div>
+
+              <div className="hero-art-dots" aria-hidden="true">
+                {sampleCards.map((_, i) => (
+                  <span key={i} className={`hero-art-dot ${i === cardIndex ? 'active' : ''}`} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
       </section>
-      <section className="container features">
-        <h2 className="section-heading reveal">How it works</h2>
-        <Feature
-          n="1"
-          delayClass="reveal-1"
-          title="Apply in Minutes"
-          body="Enter your details and get instant eligibility check. We use simple, modern checks to approve eligible customers quickly."
-        />
-        <Feature
-          n="2"
-          delayClass="reveal-2"
-          title="Shop at Partner Stores"
-          body="Select groceries or medication from approved vendors. We focus on what matters: your health and your home."
-        />
-        <Feature
-          n="3"
-          delayClass="reveal-3"
-          title="Pay Later Easily"
-          body="We pay the store instantly, you repay on your own schedule. Flexible repayment designed for real life in Nigeria"
-        />
+
+      {/* Sticky pinned features — title pins on the left while steps scroll past */}
+      <section className="container features-pinned">
+        <div className="features-pinned-side">
+          <h2 className="section-heading-left reveal">How it works</h2>
+          <p className="reveal reveal-1">
+            Three simple steps — apply, shop with one of our partners, and pay later on a schedule that
+            actually fits real life in Nigeria.
+          </p>
+        </div>
+        <div className="features-pinned-list">
+          <Feature
+            n="1"
+            delayClass="reveal-1"
+            title="Apply in Minutes"
+            body="Enter your details and get an instant eligibility check. We use simple, modern checks to approve eligible customers quickly."
+          />
+          <Feature
+            n="2"
+            delayClass="reveal-2"
+            title="Shop at Partner Stores"
+            body="Select groceries or medication from approved vendors. We focus on what matters: your health and your home."
+          />
+          <Feature
+            n="3"
+            delayClass="reveal-3"
+            title="Pay Later Easily"
+            body="We pay the store instantly, you repay on your own schedule. Flexible repayment designed for real life in Nigeria."
+          />
+        </div>
       </section>
 
       {stats.length > 0 && (
@@ -101,7 +191,7 @@ export function Landing() {
           <div className="impact-grid">
             {chunk(stats, 2).map((pair, i) => (
               <div
-                className={`impact-card-grouped ${i === 0 ? 'green' : 'plain'} reveal reveal-${Math.min(i + 1, 4)}`}
+                className={`impact-card-grouped ${i === 0 ? 'green' : 'plain glow'} reveal reveal-${Math.min(i + 1, 4)}`}
                 key={pair.map((s) => s._id).join('|')}
               >
                 {pair.map((s, j) => (
@@ -111,7 +201,9 @@ export function Landing() {
                         <StatIcon icon={s.icon} size={22} />
                       </span>
                       <div>
-                        <div className="impact-value">{s.value}</div>
+                        <div className="impact-value">
+                          <CountUp value={s.value} />
+                        </div>
                         <div className="impact-label">{s.label}</div>
                       </div>
                     </div>
@@ -127,12 +219,12 @@ export function Landing() {
       {!isStaff && (
         <section className="container landing-extras">
           <h2 className="section-heading reveal">Get in touch</h2>
-          <div className="card extra-card reveal reveal-1">
+          <div className="card extra-card glow reveal reveal-1">
             <h3>Have a question?</h3>
             <p>Send a message and our team will get back to you by email.</p>
             <Link to="/contact" className="btn btn-secondary">Contact us</Link>
           </div>
-          <div className="card extra-card reveal reveal-2">
+          <div className="card extra-card glow reveal reveal-2">
             <h3>Run a pharmacy or grocery store?</h3>
             <p>Apply to partner with Esena Africa and serve our customers.</p>
             <Link to="/partner" className="btn btn-secondary">Partner with us</Link>
@@ -170,7 +262,7 @@ function Feature({
   delayClass?: string;
 }) {
   return (
-    <div className={`feature reveal ${delayClass}`.trim()}>
+    <div className={`feature glow reveal ${delayClass}`.trim()}>
       <div className="feature-icon">{n}</div>
       <h3>{title}</h3>
       <p style={{ marginBottom: 0 }}>{body}</p>

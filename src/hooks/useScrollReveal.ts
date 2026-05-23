@@ -22,10 +22,11 @@ export function useScrollReveal(key?: unknown) {
         entries.forEach((e) => {
           // Toggle on every entry/exit so the animation replays every time
           // the user scrolls the element back into view — both up and down.
-          e.target.classList.toggle('in-view', e.isIntersecting);
+          if (e.isIntersecting) e.target.classList.add('in-view');
+          else e.target.classList.remove('in-view');
         });
       },
-      { threshold: 0.12, rootMargin: '0px 0px -60px 0px' }
+      { threshold: 0, rootMargin: '0px 0px -80px 0px' }
     );
     targets.forEach((t) => io.observe(t));
     return () => io.disconnect();
