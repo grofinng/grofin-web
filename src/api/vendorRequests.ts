@@ -1,21 +1,13 @@
 import { api } from './client';
-import { VendorCategory, VendorRequest, VendorRequestStatus } from '../types';
-
-export interface VendorRequestSubmission {
-  businessName: string;
-  address: string;
-  area: string;
-  category: VendorCategory;
-  contactPhone?: string;
-  ownerName: string;
-  ownerPhone: string;
-  ownerEmail: string;
-  notes?: string;
-}
+import { VendorRequest, VendorRequestStatus } from '../types';
 
 export const vendorRequestsApi = {
-  submit: (data: VendorRequestSubmission) =>
-    api.post<{ request: VendorRequest }>('/vendor-requests', data).then((r) => r.data.request),
+  submit: (formData: FormData) =>
+    api
+      .post<{ request: VendorRequest }>('/vendor-requests', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.request),
   list: (status?: VendorRequestStatus) =>
     api
       .get<{ requests: VendorRequest[] }>('/vendor-requests', {

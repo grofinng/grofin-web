@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { vendorRequestsApi } from '../api/vendorRequests';
 import { contactRequestsApi } from '../api/contactRequests';
-import { extractApiError } from '../api/client';
+import { extractApiError, fileUrl } from '../api/client';
 import { ContactRequest, VendorRequest, VendorRequestStatus } from '../types';
 import { formatDate } from '../utils/format';
 
@@ -239,10 +239,29 @@ export function AdminRequests() {
                         <div><strong>Category</strong>{r.category}</div>
                         <div><strong>Area</strong>{r.area}</div>
                         <div><strong>Business phone</strong>{r.contactPhone || '—'}</div>
+                        <div><strong>CAC registered?</strong>{r.cacRegistered || '—'}</div>
                         <div style={{ gridColumn: '1 / -1' }}>
                           <strong>Address</strong>{r.address}
                         </div>
                       </div>
+
+                      {(r.storefrontPhoto || r.goodsPhoto) && (
+                        <>
+                          <h3>Photos</h3>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {r.storefrontPhoto && (
+                              <a className="btn btn-secondary" href={fileUrl(r.storefrontPhoto.path)} target="_blank" rel="noreferrer">
+                                Store front
+                              </a>
+                            )}
+                            {r.goodsPhoto && (
+                              <a className="btn btn-secondary" href={fileUrl(r.goodsPhoto.path)} target="_blank" rel="noreferrer">
+                                Goods inside
+                              </a>
+                            )}
+                          </div>
+                        </>
+                      )}
 
                       <h3>Owner</h3>
                       <div className="detail-grid">

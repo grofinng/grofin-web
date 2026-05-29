@@ -156,6 +156,9 @@ export interface VendorRequest {
   area: string;
   category: VendorCategory;
   contactPhone: string;
+  cacRegistered: 'Yes' | 'No';
+  storefrontPhoto?: UploadedFile;
+  goodsPhoto?: UploadedFile;
   ownerName: string;
   ownerPhone: string;
   ownerEmail: string;

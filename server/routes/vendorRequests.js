@@ -1,9 +1,33 @@
 const express = require('express');
+const { put } = require('@vercel/blob');
 const VendorRequest = require('../models/VendorRequest');
 const Vendor = require('../models/Vendor');
+const upload = require('../middleware/upload');
 const { protect, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+
+const photoFields = upload.fields([
+  { name: 'storefrontPhoto', maxCount: 1 },
+  { name: 'goodsPhoto', maxCount: 1 },
+]);
+
+async function fileFromMulter(file, prefix) {
+  if (!file) return undefined;
+  const safeOriginal = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const blob = await put(`vendor-requests/${prefix}-${Date.now()}-${safeOriginal}`, file.buffer, {
+    access: 'public',
+    contentType: file.mimetype,
+    addRandomSuffix: true,
+  });
+  return {
+    originalName: file.originalname,
+    filename: blob.pathname,
+    mimetype: file.mimetype,
+    size: file.size,
+    path: blob.url,
+  };
+}
 
 async function nextPartnerCode() {
   const last = await Vendor.findOne({ partnerCode: /^GR\d+$/ })
@@ -16,35 +40,52 @@ async function nextPartnerCode() {
 }
 
 // Public — anyone visiting the marketing site can submit
-router.post('/', async (req, res, next) => {
-  try {
-    const {
-      businessName, address, area, category,
-      contactPhone, ownerName, ownerPhone, ownerEmail, notes,
-    } = req.body;
+router.post('/', (req, res, next) => {
+  photoFields(req, res, async (uploadErr) => {
+    if (uploadErr) return res.status(400).json({ message: uploadErr.message });
+    try {
+      const {
+        businessName, address, area, category,
+        contactPhone, cacRegistered, ownerName, ownerPhone, ownerEmail, notes,
+      } = req.body;
 
-    if (!businessName || !address || !area || !category) {
-      return res.status(400).json({ message: 'Business name, address, area, and category are required' });
-    }
-    if (!ownerName || !ownerPhone || !ownerEmail) {
-      return res.status(400).json({ message: 'Owner name, phone, and email are required' });
-    }
+      if (!businessName || !address || !area || !category) {
+        return res.status(400).json({ message: 'Business name, address, area, and category are required' });
+      }
+      if (!contactPhone) {
+        return res.status(400).json({ message: 'Business phone is required' });
+      }
+      if (!['Yes', 'No'].includes(cacRegistered)) {
+        return res.status(400).json({ message: 'Please indicate whether the business is registered with CAC' });
+      }
+      if (!ownerName || !ownerPhone || !ownerEmail) {
+        return res.status(400).json({ message: 'Owner name, phone, and email are required' });
+      }
 
-    const created = await VendorRequest.create({
-      businessName,
-      address,
-      area,
-      category,
-      contactPhone: contactPhone || '',
-      ownerName,
-      ownerPhone,
-      ownerEmail,
-      notes: notes || '',
-    });
-    res.status(201).json({ request: created });
-  } catch (err) {
-    next(err);
-  }
+      const [storefrontPhoto, goodsPhoto] = await Promise.all([
+        fileFromMulter(req.files?.storefrontPhoto?.[0], 'storefront'),
+        fileFromMulter(req.files?.goodsPhoto?.[0], 'goods'),
+      ]);
+
+      const created = await VendorRequest.create({
+        businessName,
+        address,
+        area,
+        category,
+        contactPhone,
+        cacRegistered,
+        storefrontPhoto,
+        goodsPhoto,
+        ownerName,
+        ownerPhone,
+        ownerEmail,
+        notes: notes || '',
+      });
+      res.status(201).json({ request: created });
+    } catch (err) {
+      next(err);
+    }
+  });
 });
 
 // Admin — list requests, optionally filtered by status

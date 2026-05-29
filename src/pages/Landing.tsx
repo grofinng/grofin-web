@@ -154,35 +154,26 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Sticky pinned features — title pins on the left while steps scroll past */}
-      <section className="container features-pinned">
-        <div className="features-pinned-side">
-          <h2 className="section-heading-left reveal">How it works</h2>
-          <p className="reveal reveal-1">
-            Three simple steps — apply, shop with one of our partners, and pay later on a schedule that
-            actually fits real life in Nigeria.
-          </p>
-        </div>
-        <div className="features-pinned-list">
-          <Feature
-            n="1"
-            delayClass="reveal-1"
-            title="Apply in Minutes"
-            body="Enter your details and get an instant eligibility check. We use simple, modern checks to approve eligible customers quickly."
-          />
-          <Feature
-            n="2"
-            delayClass="reveal-2"
-            title="Shop at Partner Stores"
-            body="Select groceries or medication from approved vendors. We focus on what matters: your health and your home."
-          />
-          <Feature
-            n="3"
-            delayClass="reveal-3"
-            title="Pay Later Easily"
-            body="We pay the store instantly, you repay on your own schedule. Flexible repayment designed for real life in Nigeria."
-          />
-        </div>
+      <section className="container features">
+        <h2 className="section-heading reveal">How it works</h2>
+        <Feature
+          n="1"
+          delayClass="reveal-1"
+          title="Apply in Minutes"
+          body="Enter your details and get an instant eligibility check. We use simple, modern checks to approve eligible customers quickly."
+        />
+        <Feature
+          n="2"
+          delayClass="reveal-2"
+          title="Shop at Partner Stores"
+          body="Select groceries or medication from approved vendors. We focus on what matters: your health and your home."
+        />
+        <Feature
+          n="3"
+          delayClass="reveal-3"
+          title="Pay Later Easily"
+          body="We pay the store instantly, you repay on your own schedule. Flexible repayment designed for real life in Nigeria."
+        />
       </section>
 
       {stats.length > 0 && (

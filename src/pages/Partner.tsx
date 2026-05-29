@@ -12,17 +12,22 @@ export function Partner() {
     area: '',
     category: 'Grocery' as VendorCategory,
     contactPhone: '',
+    cacRegistered: '' as '' | 'Yes' | 'No',
     ownerName: '',
     ownerPhone: '',
     ownerEmail: '',
     notes: '',
   });
+  const [storefrontPhoto, setStorefrontPhoto] = useState<File | null>(null);
+  const [goodsPhoto, setGoodsPhoto] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-    setForm((prev) => ({ ...prev, [k]: e.target.value as typeof prev[typeof k] }));
+  const update =
+    (k: keyof typeof form) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+      setForm((prev) => ({ ...prev, [k]: e.target.value as typeof prev[typeof k] }));
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -30,36 +35,35 @@ export function Partner() {
     if (!form.businessName.trim()) return setError('Business name is required');
     if (!form.address.trim()) return setError('Business address is required');
     if (!form.area.trim()) return setError('Area is required');
+    if (!form.contactPhone.trim()) return setError('Business phone is required');
+    if (form.cacRegistered !== 'Yes' && form.cacRegistered !== 'No') {
+      return setError('Please indicate whether the business is registered with CAC');
+    }
+    if (!storefrontPhoto) return setError('Upload a front-view photo of the store');
+    if (!goodsPhoto) return setError('Upload a photo of the goods inside the store');
     if (!form.ownerName.trim()) return setError('Owner full name is required');
     if (!form.ownerPhone.trim()) return setError('Owner phone is required');
     if (!/^\S+@\S+\.\S+$/.test(form.ownerEmail)) return setError('Enter a valid owner email');
 
     setSubmitting(true);
     try {
-      await vendorRequestsApi.submit({
-        businessName: form.businessName.trim(),
-        address: form.address.trim(),
-        area: form.area.trim(),
-        category: form.category,
-        contactPhone: form.contactPhone.trim(),
-        ownerName: form.ownerName.trim(),
-        ownerPhone: form.ownerPhone.trim(),
-        ownerEmail: form.ownerEmail.trim().toLowerCase(),
-        notes: form.notes.trim(),
-      });
+      const fd = new FormData();
+      fd.append('businessName', form.businessName.trim());
+      fd.append('address', form.address.trim());
+      fd.append('area', form.area.trim());
+      fd.append('category', form.category);
+      fd.append('contactPhone', form.contactPhone.trim());
+      fd.append('cacRegistered', form.cacRegistered);
+      fd.append('ownerName', form.ownerName.trim());
+      fd.append('ownerPhone', form.ownerPhone.trim());
+      fd.append('ownerEmail', form.ownerEmail.trim().toLowerCase());
+      fd.append('notes', form.notes.trim());
+      fd.append('storefrontPhoto', storefrontPhoto);
+      fd.append('goodsPhoto', goodsPhoto);
+
+      await vendorRequestsApi.submit(fd);
       toast.success('Partner request submitted');
       setSent(true);
-      setForm({
-        businessName: '',
-        address: '',
-        area: '',
-        category: 'Grocery',
-        contactPhone: '',
-        ownerName: '',
-        ownerPhone: '',
-        ownerEmail: '',
-        notes: '',
-      });
     } catch (err) {
       setError(extractApiError(err, 'Could not submit your request right now'));
     } finally {
@@ -78,9 +82,6 @@ export function Partner() {
           </p>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             <Link to="/" className="btn">Back home</Link>
-            <button type="button" className="btn btn-ghost" onClick={() => setSent(false)}>
-              Submit another request
-            </button>
           </div>
         </div>
       </div>
@@ -144,8 +145,35 @@ export function Partner() {
                 value={form.contactPhone}
                 onChange={update('contactPhone')}
               />
-              <span className="field-help">Optional</span>
             </div>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="cacRegistered">Is the business registered with CAC?</label>
+            <select
+              id="cacRegistered"
+              value={form.cacRegistered}
+              onChange={(e) => setForm({ ...form, cacRegistered: e.target.value as 'Yes' | 'No' })}
+            >
+              <option value="">Select an option</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+
+          <div className="form-row">
+            <PhotoField
+              id="storefrontPhoto"
+              label="Store front-view photo"
+              file={storefrontPhoto}
+              onChange={setStorefrontPhoto}
+            />
+            <PhotoField
+              id="goodsPhoto"
+              label="Photo of goods inside the store"
+              file={goodsPhoto}
+              onChange={setGoodsPhoto}
+            />
           </div>
 
           <div className="section-title" style={{ marginTop: '1rem' }}>Owner</div>
@@ -195,6 +223,43 @@ export function Partner() {
           </Link>
         </form>
       </div>
+    </div>
+  );
+}
+
+function PhotoField({
+  id,
+  label,
+  file,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+}) {
+  return (
+    <div className="form-group">
+      <label htmlFor={id}>{label}</label>
+      <label className={`file-drop ${file ? 'has-file' : ''}`}>
+        <span className="file-drop-label">{file ? file.name : `Upload ${label.toLowerCase()}`}</span>
+        <span className="file-drop-meta">
+          {file ? `${(file.size / 1024).toFixed(0)} KB` : 'PNG or JPG · max 5 MB'}
+        </span>
+        <input
+          id={id}
+          type="file"
+          accept="image/png,image/jpeg"
+          onChange={(e) => {
+            const f = e.target.files?.[0] || null;
+            if (f && f.size > 5 * 1024 * 1024) {
+              onChange(null);
+              return;
+            }
+            onChange(f);
+          }}
+        />
+      </label>
     </div>
   );
 }
