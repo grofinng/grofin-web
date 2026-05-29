@@ -18,6 +18,7 @@ export function Partner() {
     ownerEmail: '',
     notes: '',
   });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [storefrontPhoto, setStorefrontPhoto] = useState<File | null>(null);
   const [goodsPhoto, setGoodsPhoto] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function Partner() {
     if (!form.ownerName.trim()) return setError('Owner full name is required');
     if (!form.ownerPhone.trim()) return setError('Owner phone is required');
     if (!/^\S+@\S+\.\S+$/.test(form.ownerEmail)) return setError('Enter a valid owner email');
+    if (!acceptedTerms) return setError('You must accept the Partner Terms & Conditions');
 
     setSubmitting(true);
     try {
@@ -58,6 +60,7 @@ export function Partner() {
       fd.append('ownerPhone', form.ownerPhone.trim());
       fd.append('ownerEmail', form.ownerEmail.trim().toLowerCase());
       fd.append('notes', form.notes.trim());
+      fd.append('termsAccepted', 'true');
       fd.append('storefrontPhoto', storefrontPhoto);
       fd.append('goodsPhoto', goodsPhoto);
 
@@ -213,6 +216,23 @@ export function Partner() {
               rows={3}
               placeholder="Optional — opening hours, branches, etc."
             />
+          </div>
+
+          <div className="form-group">
+            <label className={`checkbox-row ${acceptedTerms ? 'checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+              />
+              <span>
+                I have read, understood and agree to be legally bound by Esena Africa's{' '}
+                <Link to="/partner-terms" target="_blank" rel="noreferrer">
+                  Partner Terms &amp; Conditions
+                </Link>{' '}
+                on behalf of the business named above.
+              </span>
+            </label>
           </div>
 
           <button type="submit" className="btn" disabled={submitting}>

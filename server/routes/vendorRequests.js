@@ -46,7 +46,7 @@ router.post('/', (req, res, next) => {
     try {
       const {
         businessName, address, area, category,
-        contactPhone, cacRegistered, ownerName, ownerPhone, ownerEmail, notes,
+        contactPhone, cacRegistered, ownerName, ownerPhone, ownerEmail, notes, termsAccepted,
       } = req.body;
 
       if (!businessName || !address || !area || !category) {
@@ -60,6 +60,9 @@ router.post('/', (req, res, next) => {
       }
       if (!ownerName || !ownerPhone || !ownerEmail) {
         return res.status(400).json({ message: 'Owner name, phone, and email are required' });
+      }
+      if (String(termsAccepted) !== 'true') {
+        return res.status(400).json({ message: 'You must accept the Partner Terms & Conditions' });
       }
 
       const [storefrontPhoto, goodsPhoto] = await Promise.all([
@@ -80,6 +83,8 @@ router.post('/', (req, res, next) => {
         ownerPhone,
         ownerEmail,
         notes: notes || '',
+        termsAccepted: true,
+        termsAcceptedAt: new Date(),
       });
       res.status(201).json({ request: created });
     } catch (err) {

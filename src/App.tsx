@@ -20,6 +20,8 @@ import { AdminImpactStats } from './pages/AdminImpactStats';
 import { Account } from './pages/Account';
 import { Contact } from './pages/Contact';
 import { Partner } from './pages/Partner';
+import { EndUserTerms } from './pages/EndUserTerms';
+import { PartnerTerms } from './pages/PartnerTerms';
 
 function GuestOnly({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -37,6 +39,8 @@ function AppRoutes() {
           <Route path="/" element={<Landing />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/partner" element={<Partner />} />
+          <Route path="/terms" element={<EndUserTerms />} />
+          <Route path="/partner-terms" element={<PartnerTerms />} />
           <Route path="/login" element={<GuestOnly><Login /></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
           <Route

@@ -22,6 +22,11 @@
 
 * { box-sizing: border-box; }
 
+/* The app is designed light-only — opt out of mobile browser auto-dark
+   inversion (e.g. Chrome Android "auto dark theme") which otherwise mangles
+   the navbar and hamburger button colours. */
+:root { color-scheme: light only; }
+
 .app-main {
   min-height: calc(100vh - 64px - 70px);
   padding-top: 64px; /* matches the fixed navbar height */
@@ -753,6 +758,40 @@ textarea { resize: vertical; min-height: 90px; }
   .landing-extras { grid-template-columns: 1fr; }
 }
 
+/* Legal documents (Terms & Conditions) */
+.legal-doc .legal-meta {
+  font-size: 0.82rem;
+  color: var(--gf-muted);
+  margin-top: 0.4rem;
+}
+.legal-body { line-height: 1.6; }
+.legal-body h2 {
+  font-size: 1.1rem;
+  margin: 1.75rem 0 0.6rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gf-border);
+  color: var(--gf-green-900);
+}
+.legal-body h2:first-of-type { border-top: none; padding-top: 0; }
+.legal-body p { color: var(--gf-ink); font-size: 0.94rem; }
+.legal-body ul { margin: 0 0 1rem; padding-left: 1.25rem; color: var(--gf-ink); font-size: 0.94rem; }
+.legal-body li { margin-bottom: 0.35rem; line-height: 1.5; }
+.legal-body table.simple { margin: 0.5rem 0 1rem; }
+.legal-callout {
+  background: var(--gf-green-100);
+  border: 1px solid #b7dec8;
+  border-radius: var(--gf-radius-sm);
+  padding: 0.85rem 1rem;
+  font-weight: 600;
+  color: var(--gf-green-900) !important;
+}
+.legal-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
 /* Auth */
 .auth-shell {
   min-height: calc(100vh - 64px);
@@ -1019,4 +1058,7 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
 }
 .footer-inner { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
 .footer-copy { display: flex; align-items: center; gap: 0.5rem; }
+.footer-links { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+.footer-links a { color: var(--gf-muted); }
+.footer-links a:hover { color: var(--gf-green-700); }
 .footer-mark { width: 22px; height: 22px; border-radius: 6px; display: block; }

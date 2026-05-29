@@ -13,7 +13,7 @@ function signToken(id) {
 
 router.post('/register', async (req, res, next) => {
   try {
-    const { firstName, surname, email, password, nin } = req.body;
+    const { firstName, surname, email, password, nin, acceptedTerms } = req.body;
     if (!firstName || !surname || !email || !password) {
       return res.status(400).json({ message: 'All fields are required' });
     }
@@ -23,10 +23,20 @@ router.post('/register', async (req, res, next) => {
     if (!/^\d{11}$/.test(String(nin || ''))) {
       return res.status(400).json({ message: 'NIN must be 11 digits' });
     }
+    if (acceptedTerms !== true && String(acceptedTerms) !== 'true') {
+      return res.status(400).json({ message: 'You must accept the Terms & Conditions' });
+    }
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) return res.status(409).json({ message: 'Email already registered' });
 
-    const user = await User.create({ firstName, surname, email, password, nin });
+    const user = await User.create({
+      firstName,
+      surname,
+      email,
+      password,
+      nin,
+      termsAcceptedAt: new Date(),
+    });
     const token = signToken(user._id);
     res.status(201).json({ token, user: user.toSafe() });
   } catch (err) {

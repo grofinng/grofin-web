@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
 import { applicationsApi } from '../api/applications';
@@ -813,7 +813,9 @@ function ReviewStep({ form, update, errors, breakdownTotal, loanAmountNum }: Rev
             onChange={(e) => update('termsAccepted', e.target.checked)}
           />
           <span>
-            I confirm the information is accurate and I accept Esena Africa's Terms and Conditions.
+            I confirm the information is accurate and I have read, understood and agree to Esena
+            Africa's{' '}
+            <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>.
           </span>
         </label>
         {errors.termsAccepted && <span className="field-error">{errors.termsAccepted}</span>}

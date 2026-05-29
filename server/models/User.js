@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema(
       },
     },
     receiveApplicationEmails: { type: Boolean, default: false },
+    termsAcceptedAt: { type: Date },
   },
   { timestamps: true, collection: 'users' }
 );

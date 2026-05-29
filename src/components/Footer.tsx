@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 export function Footer() {
   return (
     <footer className="footer">
@@ -6,9 +8,10 @@ export function Footer() {
           <img src="/esena-favicon.jpeg" alt="Esena Africa" className="footer-mark" />
           <span>© {new Date().getFullYear()} Esena Africa. Lagos, Nigeria.</span>
         </div>
-        {/* <div>
-          <a href="mailto:grofinng@gmail.com">grofinng@gmail.com</a>
-        </div> */}
+        <div className="footer-links">
+          <Link to="/terms">Terms &amp; Conditions</Link>
+          <Link to="/partner-terms">Partner Terms</Link>
+        </div>
       </div>
     </footer>
   );

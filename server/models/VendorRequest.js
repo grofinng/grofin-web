@@ -35,6 +35,8 @@ const vendorRequestSchema = new mongoose.Schema(
       match: [/^\S+@\S+\.\S+$/, 'Invalid email'],
     },
     notes: { type: String, trim: true, default: '' },
+    termsAccepted: { type: Boolean, required: true },
+    termsAcceptedAt: { type: Date },
 
     status: { type: String, enum: STATUSES, default: 'pending' },
     adminNote: { type: String, default: '' },

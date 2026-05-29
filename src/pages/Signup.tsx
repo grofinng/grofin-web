@@ -17,6 +17,7 @@ export function Signup() {
     password: '',
     confirm: '',
   });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -30,6 +31,7 @@ export function Signup() {
     if (!/^\d{11}$/.test(form.nin)) return 'NIN must be 11 digits';
     if (form.password.length < 6) return 'Password must be at least 6 characters';
     if (form.password !== form.confirm) return 'Passwords do not match';
+    if (!acceptedTerms) return 'You must accept the Terms & Conditions to continue';
     return null;
   };
 
@@ -47,6 +49,7 @@ export function Signup() {
         email: form.email.trim().toLowerCase(),
         nin: form.nin,
         password: form.password,
+        acceptedTerms,
       });
       emailNotifications.registration({ email: user.email, firstName: user.firstName });
       toast.success('Account created — welcome to Esena Africa');
@@ -107,6 +110,19 @@ export function Signup() {
               <label htmlFor="confirm">Confirm password</label>
               <input id="confirm" type="password" autoComplete="new-password" value={form.confirm} onChange={update('confirm')} required />
             </div>
+          </div>
+          <div className="form-group">
+            <label className={`checkbox-row ${acceptedTerms ? 'checked' : ''}`}>
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+              />
+              <span>
+                I have read, understood and agree to Esena Africa's{' '}
+                <Link to="/terms" target="_blank" rel="noreferrer">Terms &amp; Conditions</Link>.
+              </span>
+            </label>
           </div>
           <button type="submit" className="btn btn-block" disabled={submitting}>
             {submitting ? <span className="spinner" /> : 'Create account'}
