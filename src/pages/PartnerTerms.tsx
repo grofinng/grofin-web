@@ -131,8 +131,6 @@ export function PartnerTerms() {
         <h2>13. Contact and Complaints</h2>
         <table className="simple">
           <tbody>
-            <tr><td>Compliance enquiries</td><td>compliance@esena.africa</td></tr>
-            <tr><td>Data protection matters</td><td>dpo@esena.africa</td></tr>
             <tr><td>Partner support</td><td>partners@esena.africa</td></tr>
           </tbody>
         </table>

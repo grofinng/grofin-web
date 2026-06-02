@@ -334,10 +334,6 @@ export function EndUserTerms() {
         <table className="simple">
           <tbody>
             <tr><td>Customer Support</td><td>support@esena.africa · In-App Chat</td></tr>
-            <tr><td>Data Protection Officer</td><td>dpo@esena.africa</td></tr>
-            <tr><td>Website</td><td>www.esena.africa</td></tr>
-            <tr><td>FCCPC (External Escalation)</td><td>www.fccpc.gov.ng</td></tr>
-            <tr><td>CBN Consumer Protection</td><td>www.cbn.gov.ng/ConsumerProtection</td></tr>
           </tbody>
         </table>
 

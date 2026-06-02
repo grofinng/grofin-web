@@ -1,6 +1,9 @@
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export function Footer() {
+  const { user } = useAuth();
+
   return (
     <footer className="footer">
       <div className="container footer-inner">
@@ -8,10 +11,17 @@ export function Footer() {
           <img src="/esena-favicon.jpeg" alt="Esena Africa" className="footer-mark" />
           <span>© {new Date().getFullYear()} Esena Africa. Lagos, Nigeria.</span>
         </div>
-        <div className="footer-links">
-          <Link to="/terms">Terms &amp; Conditions</Link>
-          <Link to="/partner-terms">Partner Terms</Link>
-        </div>
+        {user && (
+          <div className="footer-links">
+            {user.role === 'user' && <Link to="/terms">Terms &amp; Conditions</Link>}
+            {(user.role === 'admin' || user.role === 'manager') && (
+              <>
+                <Link to="/terms">Terms &amp; Conditions</Link>
+                <Link to="/partner-terms">Partner Terms</Link>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </footer>
   );
