@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const PURPOSES = ['Groceries', 'Medications'];
+const PURPOSES = ['Groceries', 'Medications', 'Other'];
 const STATUSES = ['received', 'processing', 'approved', 'rejected'];
 
 const purposeBreakdownSchema = new mongoose.Schema(
@@ -50,6 +50,7 @@ const applicationSchema = new mongoose.Schema(
     referralContact: { type: String, required: true, trim: true },
 
     loanAmount: { type: Number, required: true, min: 1 },
+    interestRate: { type: Number, default: 20, min: 0 },
     purposes: {
       type: [String],
       enum: PURPOSES,
@@ -112,6 +113,47 @@ const applicationSchema = new mongoose.Schema(
         return this.employmentStatus === 'not-working';
       },
     },
+    referenceAddress: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return this.employmentStatus === 'not-working';
+      },
+    },
+
+    // Payout account — required when the loan purpose is 'Other'
+    accountNumber: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return (this.purposes || []).includes('Other');
+      },
+      validate: {
+        validator: function (v) {
+          if (!(this.purposes || []).includes('Other')) return true;
+          return /^\d{10}$/.test(v || '');
+        },
+        message: 'Account number must be 10 digits',
+      },
+    },
+    bankName: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return (this.purposes || []).includes('Other');
+      },
+    },
+    accountName: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return (this.purposes || []).includes('Other');
+      },
+    },
 
     offerLetter: fileSchema,
     bankStatement: fileSchema,
@@ -124,6 +166,13 @@ const applicationSchema = new mongoose.Schema(
     status: { type: String, enum: STATUSES, default: 'received' },
     statusNote: { type: String, default: '' },
     allowEdit: { type: Boolean, default: false },
+
+    // Set by the admin on approval: where the customer repays, and when.
+    approvedAt: { type: Date },
+    dueDate: { type: Date },
+    repaymentBank: { type: String, trim: true, default: '' },
+    repaymentAccountNumber: { type: String, trim: true, default: '' },
+    repaymentAccountName: { type: String, trim: true, default: '' },
   },
   { timestamps: true, collection: 'applications' }
 );
@@ -157,7 +206,8 @@ applicationSchema.pre('validate', function (next) {
 
   const selections = this.vendorSelections || [];
   const selectedPurposes = selections.map((s) => s.purpose);
-  const missingVendor = this.purposes.filter((p) => !selectedPurposes.includes(p));
+  // 'Other' is paid to the applicant's account, so no vendor is required.
+  const missingVendor = this.purposes.filter((p) => p !== 'Other' && !selectedPurposes.includes(p));
   if (missingVendor.length) {
     return next(new Error(`Select a vendor for: ${missingVendor.join(', ')}`));
   }

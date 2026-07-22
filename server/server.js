@@ -10,6 +10,7 @@ const vendorRoutes = require('./routes/vendors');
 const vendorRequestRoutes = require('./routes/vendorRequests');
 const contactRequestRoutes = require('./routes/contactRequests');
 const impactStatRoutes = require('./routes/impactStats');
+const bankRoutes = require('./routes/banks');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/vendors', vendorRoutes);
 app.use('/api/vendor-requests', vendorRequestRoutes);
 app.use('/api/contact-requests', contactRequestRoutes);
 app.use('/api/impact-stats', impactStatRoutes);
+app.use('/api/banks', bankRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);

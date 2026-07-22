@@ -6,7 +6,9 @@ import { applicationsApi } from '../api/applications';
 import { vendorsApi } from '../api/vendors';
 import { usersApi } from '../api/users';
 import { extractApiError } from '../api/client';
-import { EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor } from '../types';
+import { Bank, EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor, VendorPurpose } from '../types';
+import { banksApi } from '../api/banks';
+import { totalRepayable } from '../utils/loan';
 import { formatNaira } from '../utils/format';
 import { emailNotifications } from '../utils/email';
 import { geoApi } from '../api/geo';
@@ -46,13 +48,20 @@ interface ApplyFormState {
   referenceName: string;
   referenceRelationship: string;
   referencePhone: string;
+  referenceAddress: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string;
+  accountName: string;
   offerLetter: File | null;
   bankStatement: File | null;
   staffId: File | null;
   termsAccepted: boolean;
 }
 
-const STEPS = ['Personal', 'Employment', 'Loan request', 'Review'] as const;
+const STEPS = ['Personal details', 'Loan request', 'Review'] as const;
+
+type AccountStatus = 'idle' | 'verifying' | 'verified' | 'failed' | 'manual';
 
 export function Apply() {
   const { user } = useAuth();
@@ -95,11 +104,11 @@ export function Apply() {
           setEditLoadError('This application is not open for editing.');
           return;
         }
-        const breakdown: Record<Purpose, string> = { Groceries: '', Medications: '' };
+        const breakdown: Record<Purpose, string> = { Groceries: '', Medications: '', Other: '' };
         app.purposeBreakdown.forEach((b) => {
           breakdown[b.purpose] = String(b.amount);
         });
-        const vendorIds: Record<Purpose, string> = { Groceries: '', Medications: '' };
+        const vendorIds: Record<Purpose, string> = { Groceries: '', Medications: '', Other: '' };
         app.vendorSelections.forEach((s) => {
           vendorIds[s.purpose] =
             typeof s.vendor === 'object' ? (s.vendor as Vendor)._id : (s.vendor as string);
@@ -131,6 +140,11 @@ export function Apply() {
           referenceName: app.referenceName || '',
           referenceRelationship: app.referenceRelationship || '',
           referencePhone: app.referencePhone || '',
+          referenceAddress: app.referenceAddress || '',
+          accountNumber: app.accountNumber || '',
+          bankCode: '',
+          bankName: app.bankName || '',
+          accountName: app.accountName || '',
           offerLetter: null,
           bankStatement: null,
           staffId: null,
@@ -163,14 +177,19 @@ export function Apply() {
     referralContact: '',
     loanAmount: '',
     purposes: [],
-    breakdown: { Groceries: '', Medications: '' },
-    vendorIds: { Groceries: '', Medications: '' },
+    breakdown: { Groceries: '', Medications: '', Other: '' },
+    vendorIds: { Groceries: '', Medications: '', Other: '' },
     employmentStatus: '',
     employerName: '',
     officeAddress: '',
     referenceName: '',
     referenceRelationship: '',
     referencePhone: '',
+    referenceAddress: '',
+    accountNumber: '',
+    bankCode: '',
+    bankName: '',
+    accountName: '',
     offerLetter: null,
     bankStatement: null,
     staffId: null,
@@ -230,6 +249,54 @@ export function Apply() {
     };
   }, [form.country, form.state]);
 
+  // Bank list + account verification (only needed when purpose 'Other' is chosen).
+  const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<AccountStatus>('idle');
+
+  const wantsOther = form.purposes.includes('Other');
+
+  useEffect(() => {
+    if (!wantsOther || banks.length > 0) return;
+    let cancelled = false;
+    setBanksLoading(true);
+    banksApi
+      .list()
+      .then((list) => !cancelled && setBanks(list))
+      .catch(() => {})
+      .finally(() => !cancelled && setBanksLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsOther, banks.length]);
+
+  useEffect(() => {
+    if (!wantsOther) return;
+    if (!/^\d{10}$/.test(form.accountNumber) || !form.bankCode) {
+      setAccountStatus('idle');
+      return;
+    }
+    let cancelled = false;
+    setAccountStatus('verifying');
+    banksApi
+      .resolve(form.accountNumber, form.bankCode)
+      .then((name) => {
+        if (cancelled) return;
+        setAccountStatus('verified');
+        setForm((prev) => ({ ...prev, accountName: name }));
+        setErrors((prev) => ({ ...prev, accountName: '', accountNumber: '' }));
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        // 503 = no verification key configured server-side → let them type it in.
+        setAccountStatus(status === 503 ? 'manual' : 'failed');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wantsOther, form.accountNumber, form.bankCode]);
+
   // Warn before losing a half-completed application: browser close/refresh via
   // beforeunload, in-app navigation via a capture-phase interceptor on links
   // (BrowserRouter has no useBlocker support).
@@ -269,15 +336,26 @@ export function Apply() {
   const togglePurpose = (purpose: Purpose) => {
     setForm((prev) => {
       const exists = prev.purposes.includes(purpose);
-      const purposes = exists ? prev.purposes.filter((p) => p !== purpose) : [...prev.purposes, purpose];
+      // 'Other' is exclusive: selecting it clears the rest, and selecting
+      // anything else clears 'Other'.
+      let purposes: Purpose[];
+      if (exists) {
+        purposes = prev.purposes.filter((p) => p !== purpose);
+      } else if (purpose === 'Other') {
+        purposes = ['Other'];
+      } else {
+        purposes = [...prev.purposes.filter((p) => p !== 'Other'), purpose];
+      }
       const breakdown = { ...prev.breakdown };
       const vendorIds = { ...prev.vendorIds };
-      if (!exists && purposes.length === 1) {
-        breakdown[purpose] = prev.loanAmount || '';
-      }
-      if (exists) {
-        breakdown[purpose] = '';
-        vendorIds[purpose] = '';
+      (Object.keys(breakdown) as Purpose[]).forEach((p) => {
+        if (!purposes.includes(p)) {
+          breakdown[p] = '';
+          vendorIds[p] = '';
+        }
+      });
+      if (purposes.length === 1) {
+        breakdown[purposes[0]] = prev.loanAmount || '';
       }
       return { ...prev, purposes, breakdown, vendorIds };
     });
@@ -345,9 +423,7 @@ export function Apply() {
       if (!form.referralContact.trim()) e.referralContact = 'Referral contact number is required';
       else if (!/^\+?\d{7,15}$/.test(form.referralContact.replace(/\s/g, '')))
         e.referralContact = 'Enter a valid referral contact';
-    }
 
-    if (s === 1) {
       if (!form.employmentStatus) {
         e.employmentStatus = 'Select your employment status';
       } else if (form.employmentStatus === 'employed') {
@@ -365,10 +441,11 @@ export function Apply() {
         if (!form.referencePhone.trim()) e.referencePhone = "Your reference's phone number is required";
         else if (!/^\+?\d{7,15}$/.test(form.referencePhone.replace(/\s/g, '')))
           e.referencePhone = 'Enter a valid phone number';
+        if (!form.referenceAddress.trim()) e.referenceAddress = "Your reference's address is required";
       }
     }
 
-    if (s === 2) {
+    if (s === 1) {
       if (!loanAmountNum || loanAmountNum <= 0) e.loanAmount = 'Enter a loan amount';
       if (form.purposes.length === 0) e.purposes = 'Select at least one purpose';
       if (form.purposes.length > 0) {
@@ -382,15 +459,22 @@ export function Apply() {
           )})`;
         }
         for (const p of form.purposes) {
-          if (!form.vendorIds[p]) {
+          if (p !== 'Other' && !form.vendorIds[p]) {
             e.vendors = `Select a vendor for ${p}`;
             break;
           }
         }
       }
+      if (form.purposes.includes('Other')) {
+        if (!/^\d{10}$/.test(form.accountNumber)) e.accountNumber = 'Account number must be 10 digits';
+        if (!form.bankName) e.bankName = 'Select your bank';
+        if (!form.accountName.trim()) e.accountName = 'Account name is required';
+        if (accountStatus === 'failed')
+          e.accountNumber = 'We could not verify this account — check the number and bank';
+      }
     }
 
-    if (s === 3) {
+    if (s === 2) {
       if (!form.termsAccepted) e.termsAccepted = 'You must accept the Terms and Conditions';
     }
 
@@ -421,13 +505,13 @@ export function Apply() {
     }
     setSubmitError(null);
 
-    const allErrors = [0, 1, 2, 3].reduce<Record<string, string>>(
+    const allErrors = [0, 1, 2].reduce<Record<string, string>>(
       (acc, s) => ({ ...acc, ...validateStep(s) }),
       {}
     );
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
-      const firstStep = [0, 1, 2, 3].find((s) => Object.keys(validateStep(s)).length > 0);
+      const firstStep = [0, 1, 2].find((s) => Object.keys(validateStep(s)).length > 0);
       if (firstStep != null) setStep(firstStep);
       return;
     }
@@ -470,6 +554,11 @@ export function Apply() {
       fd.append('referenceName', !isEmployed ? form.referenceName.trim() : '');
       fd.append('referenceRelationship', !isEmployed ? form.referenceRelationship.trim() : '');
       fd.append('referencePhone', !isEmployed ? form.referencePhone.trim() : '');
+      fd.append('referenceAddress', !isEmployed ? form.referenceAddress.trim() : '');
+      const payoutNeeded = form.purposes.includes('Other');
+      fd.append('accountNumber', payoutNeeded ? form.accountNumber.trim() : '');
+      fd.append('bankName', payoutNeeded ? form.bankName.trim() : '');
+      fd.append('accountName', payoutNeeded ? form.accountName.trim() : '');
       fd.append('termsAccepted', 'true');
       if (form.validId) fd.append('validId', form.validId);
       if (form.proofOfAddress) fd.append('proofOfAddress', form.proofOfAddress);
@@ -573,21 +662,23 @@ export function Apply() {
       {submitError && <div className="alert alert-error">{submitError}</div>}
 
       <form onSubmit={handleSubmit} noValidate className="card">
-        {step < 3 && (
+        {step < STEPS.length - 1 && (
           <p className="form-required-hint">
             Fields marked <span className="req-star">*</span> are required.
           </p>
         )}
         {step === 0 && (
-          <PersonalStep
-            form={form}
-            update={update}
-            errors={errors}
-            geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
-          />
+          <>
+            <PersonalStep
+              form={form}
+              update={update}
+              errors={errors}
+              geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
+            />
+            <EmploymentStep form={form} update={update} errors={errors} />
+          </>
         )}
-        {step === 1 && <EmploymentStep form={form} update={update} errors={errors} />}
-        {step === 2 && (
+        {step === 1 && (
           <LoanStep
             form={form}
             update={update}
@@ -601,9 +692,12 @@ export function Apply() {
             breakdownDelta={breakdownDelta}
             breakdownMatches={breakdownMatches}
             loanAmountNum={loanAmountNum}
+            banks={banks}
+            banksLoading={banksLoading}
+            accountStatus={accountStatus}
           />
         )}
-        {step === 3 && (
+        {step === 2 && (
           <ReviewStep
             form={form}
             update={update}
@@ -808,7 +902,7 @@ function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists
 function EmploymentStep({ form, update, errors }: StepProps) {
   return (
     <div>
-      <div className="section-title">Income declaration</div>
+      <div className="section-title" style={{ marginTop: '1.5rem' }}>Income declaration</div>
 
       <div className="form-group">
         <label>
@@ -896,6 +990,10 @@ function EmploymentStep({ form, update, errors }: StepProps) {
               <input id="referencePhone" inputMode="tel" value={form.referencePhone} onChange={(e) => update('referencePhone', e.target.value)} aria-invalid={!!errors.referencePhone} />
             </Field>
           </div>
+
+          <Field label="Reference address" id="referenceAddress" error={errors.referenceAddress} required>
+            <textarea id="referenceAddress" value={form.referenceAddress} onChange={(e) => update('referenceAddress', e.target.value)} aria-invalid={!!errors.referenceAddress} />
+          </Field>
         </>
       )}
     </div>
@@ -912,6 +1010,9 @@ interface LoanStepProps extends StepProps {
   breakdownDelta: number;
   breakdownMatches: boolean;
   loanAmountNum: number;
+  banks: Bank[];
+  banksLoading: boolean;
+  accountStatus: AccountStatus;
 }
 
 function LoanStep({
@@ -927,8 +1028,12 @@ function LoanStep({
   breakdownDelta,
   breakdownMatches,
   loanAmountNum,
+  banks,
+  banksLoading,
+  accountStatus,
 }: LoanStepProps) {
   const showBreakdown = form.purposes.length > 1;
+  const vendorPurposes = form.purposes.filter((p): p is VendorPurpose => p !== 'Other');
   const vendorsByCategory = useMemo(() => {
     const map: Record<string, Vendor[]> = { Pharmacy: [], Grocery: [] };
     vendors.filter((v) => v.active).forEach((v) => {
@@ -952,6 +1057,17 @@ function LoanStep({
           placeholder="e.g. 150000"
         />
       </Field>
+
+      {loanAmountNum > 0 && (
+        <div className="summary-bar" style={{ marginBottom: '1rem' }}>
+          <span>
+            Borrowing <strong>{formatNaira(loanAmountNum)}</strong>
+          </span>
+          <span>
+            Total to repay <strong>{formatNaira(totalRepayable(loanAmountNum))}</strong>
+          </span>
+        </div>
+      )}
 
       <div className="form-group">
         <label>
@@ -1021,7 +1137,7 @@ function LoanStep({
         </div>
       )}
 
-      {form.purposes.length > 0 && (
+      {vendorPurposes.length > 0 && (
         <div className="form-group">
           <label>
             Pick a partner vendor<span className="req-star" aria-hidden="true"> *</span>
@@ -1035,13 +1151,14 @@ function LoanStep({
             </div>
           ) : (
             <div style={{ display: 'grid', gap: '1rem' }}>
-              {form.purposes.map((p) => {
+              {vendorPurposes.map((p) => {
                 const category = PURPOSE_TO_CATEGORY[p];
                 const list = vendorsByCategory[category] || [];
                 return (
                   <div key={p}>
                     <div style={{ marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600 }}>
-                      Vendor for {p} <span style={{ color: 'var(--gf-muted)', fontWeight: 400 }}>({category})</span>
+                      {p === 'Medications' ? 'Select Pharmacy' : 'Select Vendor'}{' '}
+                      <span style={{ color: 'var(--gf-muted)', fontWeight: 400 }}>({p})</span>
                     </div>
                     {list.length === 0 ? (
                       <div className="alert alert-info" style={{ marginBottom: 0 }}>
@@ -1069,6 +1186,80 @@ function LoanStep({
           {errors.vendors && <span className="field-error">{errors.vendors}</span>}
         </div>
       )}
+
+      {form.purposes.includes('Other') && (
+        <>
+          <div className="alert alert-info">
+            For other essentials we pay the approved amount directly to your bank account. Enter
+            your account details below — we'll verify them with your bank.
+          </div>
+
+          <div className="form-row">
+            <Field label="Account number (10 digits)" id="accountNumber" error={errors.accountNumber} required>
+              <input
+                id="accountNumber"
+                inputMode="numeric"
+                maxLength={10}
+                value={form.accountNumber}
+                onChange={(e) => {
+                  update('accountNumber', e.target.value.replace(/\D/g, '').slice(0, 10));
+                  if (form.accountName) update('accountName', '');
+                }}
+                aria-invalid={!!errors.accountNumber}
+              />
+            </Field>
+            <Field label="Bank" id="bankCode" error={errors.bankName} required>
+              <select
+                id="bankCode"
+                value={form.bankCode}
+                onChange={(e) => {
+                  const bank = banks.find((b) => b.code === e.target.value);
+                  update('bankCode', e.target.value);
+                  update('bankName', bank?.name || '');
+                  if (form.accountName) update('accountName', '');
+                }}
+                disabled={banksLoading}
+                aria-invalid={!!errors.bankName}
+              >
+                <option value="">{banksLoading ? 'Loading banks…' : 'Select your bank'}</option>
+                {banks.map((b) => (
+                  <option key={b.code} value={b.code}>{b.name}</option>
+                ))}
+                {banks.length === 0 && !banksLoading && form.bankName && (
+                  <option value={form.bankCode}>{form.bankName}</option>
+                )}
+              </select>
+            </Field>
+          </div>
+
+          <Field
+            label="Account name"
+            id="accountName"
+            error={errors.accountName}
+            required
+            help={
+              accountStatus === 'verifying'
+                ? 'Verifying account…'
+                : accountStatus === 'verified'
+                ? '✓ Verified with your bank'
+                : accountStatus === 'manual'
+                ? 'Automatic verification is unavailable — type the account name exactly as your bank has it'
+                : accountStatus === 'failed'
+                ? undefined
+                : 'Auto-filled once your account number and bank are verified'
+            }
+          >
+            <input
+              id="accountName"
+              value={form.accountName}
+              readOnly={accountStatus === 'verified' || accountStatus === 'verifying'}
+              onChange={(e) => update('accountName', e.target.value)}
+              aria-invalid={!!errors.accountName}
+              placeholder={accountStatus === 'verifying' ? 'Verifying…' : ''}
+            />
+          </Field>
+        </>
+      )}
     </div>
   );
 }
@@ -1095,6 +1286,7 @@ function ReviewStep({
     const v = vendors.find((x) => x._id === form.vendorIds[p]);
     return v ? `${v.businessName} — ${v.area} (${v.partnerCode})` : '—';
   };
+  const vendorPurposes = form.purposes.filter((p) => p !== 'Other');
   const missingFileNote = isEditMode ? 'Keeping previously uploaded file' : 'Not uploaded';
 
   return (
@@ -1120,7 +1312,7 @@ function ReviewStep({
           </div>
         </ReviewCard>
 
-        <ReviewCard title="Employment" onEdit={() => onEdit(1)}>
+        <ReviewCard title="Employment" onEdit={() => onEdit(0)}>
           <ReviewRow
             label="Status"
             value={form.employmentStatus === 'not-working' ? 'Not currently working' : 'Employed'}
@@ -1129,6 +1321,7 @@ function ReviewStep({
             <>
               <ReviewRow label="Loan reference" value={`${form.referenceName}${form.referenceRelationship ? ` (${form.referenceRelationship})` : ''}`} />
               <ReviewRow label="Reference phone" value={form.referencePhone} />
+              <ReviewRow label="Reference address" value={form.referenceAddress} />
             </>
           ) : (
             <>
@@ -1143,8 +1336,9 @@ function ReviewStep({
           )}
         </ReviewCard>
 
-        <ReviewCard title="Loan request" onEdit={() => onEdit(2)}>
-          <ReviewRow label="Amount" value={formatNaira(loanAmountNum)} emphasis />
+        <ReviewCard title="Loan request" onEdit={() => onEdit(1)}>
+          <ReviewRow label="Amount borrowed" value={formatNaira(loanAmountNum)} />
+          <ReviewRow label="Total to repay" value={formatNaira(totalRepayable(loanAmountNum))} emphasis />
           <ReviewRow label="Purpose" value={form.purposes.join(', ')} />
           {form.purposes.length > 1 && (
             <>
@@ -1154,9 +1348,16 @@ function ReviewStep({
               <ReviewRow label="Breakdown total" value={formatNaira(breakdownTotal)} />
             </>
           )}
-          {form.purposes.map((p) => (
+          {vendorPurposes.map((p) => (
             <ReviewRow key={`vendor-${p}`} label={`Vendor · ${p}`} value={vendorName(p)} />
           ))}
+          {form.purposes.includes('Other') && (
+            <>
+              <ReviewRow label="Bank" value={form.bankName} />
+              <ReviewRow label="Account number" value={form.accountNumber} />
+              <ReviewRow label="Account name" value={form.accountName} />
+            </>
+          )}
         </ReviewCard>
       </div>
 

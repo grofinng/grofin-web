@@ -4,6 +4,7 @@ import { applicationsApi } from '../api/applications';
 import { extractApiError, fileUrl } from '../api/client';
 import { Application, ApplicationStatus, PopulatedUserRef, Vendor } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
+import { DEFAULT_INTEREST_RATE, totalRepayable } from '../utils/loan';
 import { StatusBadge } from '../components/StatusBadge';
 import { emailNotifications } from '../utils/email';
 import { useAuth } from '../context/AuthContext';
@@ -21,6 +22,18 @@ export function Admin() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
   const [allowEditDraft, setAllowEditDraft] = useState<Record<string, boolean>>({});
+  const [repayDraft, setRepayDraft] = useState<
+    Record<string, { bank: string; number: string; name: string }>
+  >({});
+
+  const repayOf = (a: Application) =>
+    repayDraft[a._id] ?? {
+      bank: a.repaymentBank || '',
+      number: a.repaymentAccountNumber || '',
+      name: a.repaymentAccountName || '',
+    };
+  const setRepay = (a: Application, patch: Partial<{ bank: string; number: string; name: string }>) =>
+    setRepayDraft((prev) => ({ ...prev, [a._id]: { ...repayOf(a), ...patch } }));
 
   useEffect(() => {
     let cancelled = false;
@@ -69,12 +82,31 @@ export function Admin() {
     }
     const allowEdit = status === 'rejected' ? !!allowEditDraft[a._id] : false;
 
+    const repay = repayOf(a);
+    if (status === 'approved') {
+      if (!repay.bank.trim() || !repay.name.trim()) {
+        toast.error('Enter the repayment bank and account name before approving.');
+        return;
+      }
+      if (!/^\d{10}$/.test(repay.number)) {
+        toast.error('The repayment account number must be 10 digits.');
+        return;
+      }
+    }
+
     setActingId(a._id);
     try {
       const updated = await applicationsApi.adminUpdateStatus(a._id, {
         status,
         statusNote: note,
         allowEdit,
+        ...(status === 'approved'
+          ? {
+              repaymentBank: repay.bank.trim(),
+              repaymentAccountNumber: repay.number.trim(),
+              repaymentAccountName: repay.name.trim(),
+            }
+          : {}),
       });
       setApps((prev) => prev.map((x) => (x._id === updated._id ? updated : x)));
       toast.success(`Application ${status}`);
@@ -222,6 +254,7 @@ export function Admin() {
                               {a.referenceRelationship && ` (${a.referenceRelationship})`}
                             </div>
                             <div><strong>Reference phone</strong>{a.referencePhone || '—'}</div>
+                            <div><strong>Reference address</strong>{a.referenceAddress || '—'}</div>
                           </>
                         ) : (
                           <>
@@ -234,7 +267,30 @@ export function Admin() {
                       <h3>Loan</h3>
                       <div className="detail-grid">
                         <div><strong>Amount</strong>{formatNaira(a.loanAmount)}</div>
+                        <div>
+                          <strong>Total to repay</strong>
+                          {formatNaira(totalRepayable(a.loanAmount, a.interestRate ?? DEFAULT_INTEREST_RATE))}
+                        </div>
+                        {a.status === 'approved' && a.approvedAt && (
+                          <div><strong>Approved on</strong>{formatDate(a.approvedAt)}</div>
+                        )}
+                        {a.status === 'approved' && a.dueDate && (
+                          <div><strong>Repayment due</strong>{formatDate(a.dueDate)}</div>
+                        )}
+                        {a.status === 'approved' && a.repaymentAccountNumber && (
+                          <div style={{ gridColumn: '1 / -1' }}>
+                            <strong>Repayment account</strong>
+                            {a.repaymentBank} · {a.repaymentAccountNumber} · {a.repaymentAccountName}
+                          </div>
+                        )}
                         <div><strong>Purpose</strong>{a.purposes.join(', ')}</div>
+                        {a.purposes.includes('Other') && (
+                          <>
+                            <div><strong>Bank</strong>{a.bankName || '—'}</div>
+                            <div><strong>Account number</strong>{a.accountNumber || '—'}</div>
+                            <div><strong>Account name</strong>{a.accountName || '—'}</div>
+                          </>
+                        )}
                         {a.purposes.length > 1 && (
                           <div style={{ gridColumn: '1 / -1' }}>
                             <strong>Breakdown</strong>
@@ -304,6 +360,39 @@ export function Admin() {
                               }
                               placeholder="Visible to the applicant. For rejections, explain what they can fix."
                             />
+                          </div>
+
+                          <div className="form-group">
+                            <label htmlFor={`repay-bank-${a._id}`}>
+                              Repayment account{' '}
+                              <span style={{ color: 'var(--gf-muted)', fontWeight: 400 }}>
+                                · required to approve — the customer repays into this account
+                              </span>
+                            </label>
+                            <div className="form-row-3">
+                              <input
+                                id={`repay-bank-${a._id}`}
+                                placeholder="Bank name"
+                                value={repayOf(a).bank}
+                                onChange={(e) => setRepay(a, { bank: e.target.value })}
+                              />
+                              <input
+                                aria-label="Repayment account number"
+                                placeholder="Account number (10 digits)"
+                                inputMode="numeric"
+                                maxLength={10}
+                                value={repayOf(a).number}
+                                onChange={(e) =>
+                                  setRepay(a, { number: e.target.value.replace(/\D/g, '').slice(0, 10) })
+                                }
+                              />
+                              <input
+                                aria-label="Repayment account name"
+                                placeholder="Account name"
+                                value={repayOf(a).name}
+                                onChange={(e) => setRepay(a, { name: e.target.value })}
+                              />
+                            </div>
                           </div>
 
                           <div className="form-group">

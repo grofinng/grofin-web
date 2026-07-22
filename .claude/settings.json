@@ -36,7 +36,16 @@
       "Bash(curl -s --get \"https://countriesnow.space/api/v0.1/countries/state/cities/q\" --data-urlencode \"country=Nigeria\" --data-urlencode \"state=Lagos\")",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(str\\(d.get\\('data', d.get\\('msg'\\)\\)\\)[:120]\\)\")",
       "Bash(node --check server/routes/applications.js)",
-      "Bash(node -e \"require\\('./server/models/Application'\\)\")"
+      "Bash(node -e \"require\\('./server/models/Application'\\)\")",
+      "Bash(curl -s \"https://api.paystack.co/bank?country=nigeria&perPage=100\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('status:', d['status'], '· banks:', len\\(d['data']\\)\\); print\\([b['name'] for b in d['data'][:5]]\\); print\\('meta:', d.get\\('meta'\\)\\)\")",
+      "Bash(node --check server/routes/banks.js)",
+      "Bash(curl -s http://localhost:8080/api/banks -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/health)",
+      "Bash(lsof -ti:8080 -sTCP:LISTEN)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node other-check.js)",
+      "Bash(node -e ' *)",
+      "Bash(python3 -c ' *)"
     ]
   }
 }

@@ -115,6 +115,10 @@ router.post('/', protect, (req, res, next) => {
         referenceName: employmentStatus === 'not-working' ? body.referenceName : '',
         referenceRelationship: employmentStatus === 'not-working' ? body.referenceRelationship : '',
         referencePhone: employmentStatus === 'not-working' ? body.referencePhone : '',
+        referenceAddress: employmentStatus === 'not-working' ? body.referenceAddress : '',
+        accountNumber: body.accountNumber || '',
+        bankName: body.bankName || '',
+        accountName: body.accountName || '',
         offerLetter,
         bankStatement,
         staffId,
@@ -154,9 +158,11 @@ router.get('/admin/all', protect, requireStaff, async (req, res, next) => {
   }
 });
 
+const REPAYMENT_WINDOW_DAYS = 29;
+
 router.patch('/admin/:id/status', protect, requireAdmin, async (req, res, next) => {
   try {
-    const { status, statusNote, allowEdit } = req.body;
+    const { status, statusNote, allowEdit, repaymentBank, repaymentAccountNumber, repaymentAccountName } = req.body;
     const allowed = ['received', 'processing', 'approved', 'rejected'];
     if (!allowed.includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
@@ -169,6 +175,39 @@ router.patch('/admin/:id/status', protect, requireAdmin, async (req, res, next) 
       statusNote: statusNote || '',
       allowEdit: status === 'rejected' ? !!allowEdit : false,
     };
+
+    if (status === 'approved') {
+      const bank = String(repaymentBank || '').trim();
+      const acctNo = String(repaymentAccountNumber || '').trim();
+      const acctName = String(repaymentAccountName || '').trim();
+      if (!bank || !acctName) {
+        return res
+          .status(400)
+          .json({ message: 'Repayment bank and account name are required to approve a loan' });
+      }
+      if (!/^\d{10}$/.test(acctNo)) {
+        return res.status(400).json({ message: 'Repayment account number must be 10 digits' });
+      }
+      const approvedAt = new Date();
+      const dueDate = new Date(approvedAt);
+      dueDate.setDate(dueDate.getDate() + REPAYMENT_WINDOW_DAYS);
+      Object.assign(update, {
+        approvedAt,
+        dueDate,
+        repaymentBank: bank,
+        repaymentAccountNumber: acctNo,
+        repaymentAccountName: acctName,
+      });
+    } else {
+      // Moving away from approved clears the repayment schedule.
+      Object.assign(update, {
+        approvedAt: null,
+        dueDate: null,
+        repaymentBank: '',
+        repaymentAccountNumber: '',
+        repaymentAccountName: '',
+      });
+    }
     const updated = await Application.findByIdAndUpdate(req.params.id, update, { new: true })
       .populate('user', 'firstName surname email')
       .populate('vendorSelections.vendor', 'businessName partnerCode area category address');
@@ -240,6 +279,10 @@ router.patch('/:id', protect, (req, res, next) => {
         referenceName: body.referenceName ?? existing.referenceName,
         referenceRelationship: body.referenceRelationship ?? existing.referenceRelationship,
         referencePhone: body.referencePhone ?? existing.referencePhone,
+        referenceAddress: body.referenceAddress ?? existing.referenceAddress,
+        accountNumber: body.accountNumber ?? existing.accountNumber,
+        bankName: body.bankName ?? existing.bankName,
+        accountName: body.accountName ?? existing.accountName,
         status: 'received',
         statusNote: '',
         allowEdit: false,

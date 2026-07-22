@@ -24,7 +24,14 @@ export const applicationsApi = {
       .then((r) => r.data.applications),
   adminUpdateStatus: (
     id: string,
-    payload: { status: ApplicationStatus; statusNote?: string; allowEdit?: boolean }
+    payload: {
+      status: ApplicationStatus;
+      statusNote?: string;
+      allowEdit?: boolean;
+      repaymentBank?: string;
+      repaymentAccountNumber?: string;
+      repaymentAccountName?: string;
+    }
   ) =>
     api
       .patch<{ application: Application }>(`/applications/admin/${id}/status`, payload)

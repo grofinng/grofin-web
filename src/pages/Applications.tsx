@@ -5,6 +5,7 @@ import { Application, ApplicationStatus, Vendor } from '../types';
 import { extractApiError } from '../api/client';
 import { formatDate, formatNaira } from '../utils/format';
 import { StatusBadge } from '../components/StatusBadge';
+import { DEFAULT_INTEREST_RATE, daysUntil, totalRepayable } from '../utils/loan';
 
 const STATUS_PIPELINE: ApplicationStatus[] = ['received', 'processing', 'approved'];
 
@@ -19,7 +20,7 @@ const NEXT_COPY: Record<ApplicationStatus, { title: string; body: string }> = {
   },
   approved: {
     title: 'Approved',
-    body: 'Your loan has been approved. We\'ll be in touch with the next steps.',
+    body: 'Your loan has been approved. Your repayment details are below.',
   },
   rejected: {
     title: 'Not approved',
@@ -128,6 +129,9 @@ function ApplicationCard({ application: a }: { application: Application }) {
   const next = NEXT_COPY[a.status];
   const isRejected = a.status === 'rejected';
   const canEdit = isRejected && !!a.allowEdit;
+  const rate = a.interestRate ?? DEFAULT_INTEREST_RATE;
+  const repayTotal = totalRepayable(a.loanAmount, rate);
+  const daysLeft = a.dueDate ? daysUntil(a.dueDate) : null;
 
   return (
     <article className={`app-card status-${a.status}`}>
@@ -148,6 +152,7 @@ function ApplicationCard({ application: a }: { application: Application }) {
         </div>
 
         <div className="app-card-meta">
+          <span><strong>To repay</strong> · {formatNaira(repayTotal)}</span>
           <span><strong>Submitted</strong> · {formatDate(a.createdAt)}</span>
           {a.updatedAt !== a.createdAt && (
             <span><strong>Updated</strong> · {formatDate(a.updatedAt)}</span>
@@ -195,6 +200,33 @@ function ApplicationCard({ application: a }: { application: Application }) {
             </div>
           </>
         ) : null}
+
+        {a.status === 'approved' && (
+          <div className="repay-box">
+            <div className="repay-box-title">Repayment</div>
+            <div className="repay-box-rows">
+              <span>Borrowed <strong>{formatNaira(a.loanAmount)}</strong></span>
+              <span>Total to repay <strong>{formatNaira(repayTotal)}</strong></span>
+            </div>
+            {a.dueDate && (
+              <div>
+                Due <strong>{formatDate(a.dueDate)}</strong>
+                {daysLeft != null && (
+                  <span className={daysLeft < 0 ? 'repay-overdue' : undefined}>
+                    {' '}
+                    · {daysLeft >= 0 ? `${daysLeft} day${daysLeft === 1 ? '' : 's'} left` : `${-daysLeft} day${daysLeft === -1 ? '' : 's'} overdue`}
+                  </span>
+                )}
+              </div>
+            )}
+            {a.repaymentAccountNumber && (
+              <div>
+                Pay into <strong>{a.repaymentBank}</strong> · <strong>{a.repaymentAccountNumber}</strong>{' '}
+                ({a.repaymentAccountName})
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="app-card-next">
           <strong>{next.title}.</strong> {next.body}

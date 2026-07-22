@@ -1,15 +1,23 @@
-export type Purpose = 'Groceries' | 'Medications';
+export type Purpose = 'Groceries' | 'Medications' | 'Other';
 
-export const PURPOSES: Purpose[] = ['Groceries', 'Medications'];
+export const PURPOSES: Purpose[] = ['Groceries', 'Medications', 'Other'];
+
+/** Purposes fulfilled through a partner vendor ('Other' pays out to the applicant's account). */
+export type VendorPurpose = Exclude<Purpose, 'Other'>;
 
 export type VendorCategory = 'Pharmacy' | 'Grocery';
 
 export const VENDOR_CATEGORIES: VendorCategory[] = ['Pharmacy', 'Grocery'];
 
-export const PURPOSE_TO_CATEGORY: Record<Purpose, VendorCategory> = {
+export const PURPOSE_TO_CATEGORY: Record<VendorPurpose, VendorCategory> = {
   Groceries: 'Grocery',
   Medications: 'Pharmacy',
 };
+
+export interface Bank {
+  name: string;
+  code: string;
+}
 
 export interface Vendor {
   _id: string;
@@ -109,6 +117,10 @@ export interface Application {
   referenceName?: string;
   referenceRelationship?: string;
   referencePhone?: string;
+  referenceAddress?: string;
+  accountNumber?: string;
+  bankName?: string;
+  accountName?: string;
   offerLetter?: UploadedFile;
   bankStatement?: UploadedFile;
   staffId?: UploadedFile;
@@ -118,6 +130,12 @@ export interface Application {
   status: ApplicationStatus;
   statusNote?: string;
   allowEdit?: boolean;
+  interestRate?: number;
+  approvedAt?: string | null;
+  dueDate?: string | null;
+  repaymentBank?: string;
+  repaymentAccountNumber?: string;
+  repaymentAccountName?: string;
   createdAt: string;
   updatedAt: string;
 }

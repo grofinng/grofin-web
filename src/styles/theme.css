@@ -1323,3 +1323,29 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
     gap: 0.1rem;
   }
 }
+
+/* Repayment summary on approved application cards */
+.repay-box {
+  margin-top: 0.75rem;
+  border: 1px solid rgba(42, 138, 82, 0.3);
+  background: var(--gf-green-100);
+  border-radius: var(--gf-radius-sm);
+  padding: 0.75rem 0.9rem;
+  font-size: 0.85rem;
+  display: grid;
+  gap: 0.4rem;
+  color: var(--gf-ink);
+}
+.repay-box-title {
+  font-weight: 700;
+  color: var(--gf-green-900);
+}
+.repay-box-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+}
+.repay-overdue {
+  color: var(--gf-danger);
+  font-weight: 600;
+}
