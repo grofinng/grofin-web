@@ -11,6 +11,7 @@ const fileFields = upload.fields([
   { name: 'bankStatement', maxCount: 1 },
   { name: 'staffId', maxCount: 1 },
   { name: 'validId', maxCount: 1 },
+  { name: 'proofOfAddress', maxCount: 1 },
 ]);
 
 async function fileFromMulter(file, prefix) {
@@ -50,10 +51,23 @@ router.post('/', protect, (req, res, next) => {
         try { vendorSelections = JSON.parse(vendorSelections); } catch { vendorSelections = []; }
       }
 
-      const required = ['offerLetter', 'bankStatement', 'staffId', 'validId'];
+      const employmentStatus = body.employmentStatus === 'not-working' ? 'not-working' : 'employed';
+
+      const required =
+        employmentStatus === 'employed'
+          ? ['offerLetter', 'bankStatement', 'staffId', 'validId', 'proofOfAddress']
+          : ['validId', 'proofOfAddress'];
       for (const f of required) {
         if (!req.files || !req.files[f] || !req.files[f][0]) {
           return res.status(400).json({ message: `${f} file is required` });
+        }
+      }
+
+      if (employmentStatus === 'not-working') {
+        if (!String(body.referenceName || '').trim() || !String(body.referencePhone || '').trim()) {
+          return res
+            .status(400)
+            .json({ message: 'A valid reference (name and phone number) is required when you are not currently working' });
         }
       }
 
@@ -61,11 +75,12 @@ router.post('/', protect, (req, res, next) => {
         return res.status(400).json({ message: 'You must accept the Terms and Conditions' });
       }
 
-      const [offerLetter, bankStatement, staffId, validId] = await Promise.all([
+      const [offerLetter, bankStatement, staffId, validId, proofOfAddress] = await Promise.all([
         fileFromMulter(req.files.offerLetter?.[0], 'offerLetter'),
         fileFromMulter(req.files.bankStatement?.[0], 'bankStatement'),
         fileFromMulter(req.files.staffId?.[0], 'staffId'),
         fileFromMulter(req.files.validId?.[0], 'validId'),
+        fileFromMulter(req.files.proofOfAddress?.[0], 'proofOfAddress'),
       ]);
 
       const application = await Application.create({
@@ -75,6 +90,7 @@ router.post('/', protect, (req, res, next) => {
         middleName: body.middleName,
         email: body.email || req.user.email,
         houseAddress: body.houseAddress,
+        country: body.country || 'Nigeria',
         lga: body.lga,
         state: body.state,
         mobileNumber: body.mobileNumber,
@@ -93,12 +109,17 @@ router.post('/', protect, (req, res, next) => {
           purpose: v.purpose,
           vendor: v.vendor,
         })),
-        employerName: body.employerName,
-        officeAddress: body.officeAddress,
+        employmentStatus,
+        employerName: employmentStatus === 'employed' ? body.employerName : '',
+        officeAddress: employmentStatus === 'employed' ? body.officeAddress : '',
+        referenceName: employmentStatus === 'not-working' ? body.referenceName : '',
+        referenceRelationship: employmentStatus === 'not-working' ? body.referenceRelationship : '',
+        referencePhone: employmentStatus === 'not-working' ? body.referencePhone : '',
         offerLetter,
         bankStatement,
         staffId,
         validId,
+        proofOfAddress,
         termsAccepted: true,
         status: 'received',
       });
@@ -196,6 +217,7 @@ router.patch('/:id', protect, (req, res, next) => {
         middleName: body.middleName ?? existing.middleName,
         email: body.email ?? existing.email,
         houseAddress: body.houseAddress ?? existing.houseAddress,
+        country: body.country ?? existing.country,
         lga: body.lga ?? existing.lga,
         state: body.state ?? existing.state,
         mobileNumber: body.mobileNumber ?? existing.mobileNumber,
@@ -212,8 +234,12 @@ router.patch('/:id', protect, (req, res, next) => {
         vendorSelections: vendorSelections
           ? vendorSelections.map((v) => ({ purpose: v.purpose, vendor: v.vendor }))
           : existing.vendorSelections,
+        employmentStatus: body.employmentStatus ?? existing.employmentStatus,
         employerName: body.employerName ?? existing.employerName,
         officeAddress: body.officeAddress ?? existing.officeAddress,
+        referenceName: body.referenceName ?? existing.referenceName,
+        referenceRelationship: body.referenceRelationship ?? existing.referenceRelationship,
+        referencePhone: body.referencePhone ?? existing.referencePhone,
         status: 'received',
         statusNote: '',
         allowEdit: false,
@@ -223,6 +249,7 @@ router.patch('/:id', protect, (req, res, next) => {
       if (req.files?.bankStatement?.[0]) existing.bankStatement = await fileFromMulter(req.files.bankStatement[0], 'bankStatement');
       if (req.files?.staffId?.[0]) existing.staffId = await fileFromMulter(req.files.staffId[0], 'staffId');
       if (req.files?.validId?.[0]) existing.validId = await fileFromMulter(req.files.validId[0], 'validId');
+      if (req.files?.proofOfAddress?.[0]) existing.proofOfAddress = await fileFromMulter(req.files.proofOfAddress[0], 'proofOfAddress');
 
       await existing.save();
       const populated = await Application.findById(existing._id)

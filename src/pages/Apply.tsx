@@ -6,9 +6,18 @@ import { applicationsApi } from '../api/applications';
 import { vendorsApi } from '../api/vendors';
 import { usersApi } from '../api/users';
 import { extractApiError } from '../api/client';
-import { PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor } from '../types';
+import { EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor } from '../types';
 import { formatNaira } from '../utils/format';
 import { emailNotifications } from '../utils/email';
+import { geoApi } from '../api/geo';
+
+interface GeoLists {
+  countries: string[];
+  states: string[];
+  cities: string[];
+  statesLoading: boolean;
+  citiesLoading: boolean;
+}
 
 interface ApplyFormState {
   surname: string;
@@ -16,6 +25,7 @@ interface ApplyFormState {
   middleName: string;
   email: string;
   houseAddress: string;
+  country: string;
   lga: string;
   state: string;
   mobileNumber: string;
@@ -23,14 +33,19 @@ interface ApplyFormState {
   bvn: string;
   nin: string;
   validId: File | null;
+  proofOfAddress: File | null;
   referredBy: string;
   referralContact: string;
   loanAmount: string;
   purposes: Purpose[];
   breakdown: Record<Purpose, string>;
   vendorIds: Record<Purpose, string>;
+  employmentStatus: EmploymentStatus | '';
   employerName: string;
   officeAddress: string;
+  referenceName: string;
+  referenceRelationship: string;
+  referencePhone: string;
   offerLetter: File | null;
   bankStatement: File | null;
   staffId: File | null;
@@ -95,6 +110,7 @@ export function Apply() {
           middleName: app.middleName || '',
           email: app.email,
           houseAddress: app.houseAddress,
+          country: app.country || 'Nigeria',
           lga: app.lga,
           state: app.state,
           mobileNumber: app.mobileNumber,
@@ -102,14 +118,19 @@ export function Apply() {
           bvn: app.bvn,
           nin: app.nin,
           validId: null,
+          proofOfAddress: null,
           referredBy: app.referredBy,
           referralContact: app.referralContact || '',
           loanAmount: String(app.loanAmount),
           purposes: app.purposes,
           breakdown,
           vendorIds,
-          employerName: app.employerName,
-          officeAddress: app.officeAddress,
+          employmentStatus: app.employmentStatus || 'employed',
+          employerName: app.employerName || '',
+          officeAddress: app.officeAddress || '',
+          referenceName: app.referenceName || '',
+          referenceRelationship: app.referenceRelationship || '',
+          referencePhone: app.referencePhone || '',
           offerLetter: null,
           bankStatement: null,
           staffId: null,
@@ -129,6 +150,7 @@ export function Apply() {
     middleName: '',
     email: user?.email || '',
     houseAddress: '',
+    country: 'Nigeria',
     lga: '',
     state: '',
     mobileNumber: '',
@@ -136,23 +158,112 @@ export function Apply() {
     bvn: '',
     nin: user?.nin || '',
     validId: null,
+    proofOfAddress: null,
     referredBy: '',
     referralContact: '',
     loanAmount: '',
     purposes: [],
     breakdown: { Groceries: '', Medications: '' },
     vendorIds: { Groceries: '', Medications: '' },
+    employmentStatus: '',
     employerName: '',
     officeAddress: '',
+    referenceName: '',
+    referenceRelationship: '',
+    referencePhone: '',
     offerLetter: null,
     bankStatement: null,
     staffId: null,
     termsAccepted: false,
   });
 
+  // Country → state → city/LGA lists come from the CountriesNow API (cached in
+  // src/api/geo.ts, with a bundled Nigeria fallback when the API is down).
+  const [countries, setCountries] = useState<string[]>([]);
+  const [statesList, setStatesList] = useState<string[]>([]);
+  const [citiesList, setCitiesList] = useState<string[]>([]);
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    geoApi
+      .countries()
+      .then((list) => !cancelled && setCountries(list))
+      .catch(() => !cancelled && setCountries(['Nigeria']));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!form.country) {
+      setStatesList([]);
+      return;
+    }
+    let cancelled = false;
+    setStatesLoading(true);
+    geoApi
+      .states(form.country)
+      .then((list) => !cancelled && setStatesList(list))
+      .catch(() => !cancelled && setStatesList([]))
+      .finally(() => !cancelled && setStatesLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.country]);
+
+  useEffect(() => {
+    if (!form.country || !form.state) {
+      setCitiesList([]);
+      return;
+    }
+    let cancelled = false;
+    setCitiesLoading(true);
+    geoApi
+      .cities(form.country, form.state)
+      .then((list) => !cancelled && setCitiesList(list))
+      .catch(() => !cancelled && setCitiesList([]))
+      .finally(() => !cancelled && setCitiesLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [form.country, form.state]);
+
+  // Warn before losing a half-completed application: browser close/refresh via
+  // beforeunload, in-app navigation via a capture-phase interceptor on links
+  // (BrowserRouter has no useBlocker support).
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) return;
+    const message = 'You have an unfinished loan application. Leave this page? Your progress will be lost.';
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    const onLinkClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!anchor) return;
+      if (anchor.target === '_blank') return;
+      const href = anchor.getAttribute('href') || '';
+      if (href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+      if (!window.confirm(message)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onLinkClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onLinkClick, true);
+    };
+  }, [dirty]);
+
   const update = <K extends keyof ApplyFormState>(key: K, value: ApplyFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: '' }));
+    setDirty(true);
   };
 
   const togglePurpose = (purpose: Purpose) => {
@@ -171,16 +282,19 @@ export function Apply() {
       return { ...prev, purposes, breakdown, vendorIds };
     });
     setErrors((prev) => ({ ...prev, purposes: '', breakdown: '', vendors: '' }));
+    setDirty(true);
   };
 
   const setBreakdown = (purpose: Purpose, value: string) => {
     setForm((prev) => ({ ...prev, breakdown: { ...prev.breakdown, [purpose]: value } }));
     setErrors((prev) => ({ ...prev, breakdown: '' }));
+    setDirty(true);
   };
 
   const setVendor = (purpose: Purpose, vendorId: string) => {
     setForm((prev) => ({ ...prev, vendorIds: { ...prev.vendorIds, [purpose]: vendorId } }));
     setErrors((prev) => ({ ...prev, vendors: '' }));
+    setDirty(true);
   };
 
   useEffect(() => {
@@ -213,13 +327,20 @@ export function Apply() {
       if (!form.firstName.trim()) e.firstName = 'First name is required';
       if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Enter a valid email';
       if (!form.houseAddress.trim()) e.houseAddress = 'House address is required';
-      if (!form.lga.trim()) e.lga = 'LGA is required';
-      if (!form.state.trim()) e.state = 'State is required';
+      if (!form.country.trim()) e.country = 'Select your country';
+      if (!form.state.trim()) e.state = 'Select your state';
+      else if (statesList.length > 0 && !statesList.includes(form.state))
+        e.state = 'Select a state from the list';
+      if (!form.lga.trim()) e.lga = 'Select your city / LGA';
+      else if (citiesList.length > 0 && !citiesList.includes(form.lga))
+        e.lga = 'Select a city / LGA in the chosen state';
       if (!/^\+?\d{7,15}$/.test(form.mobileNumber.replace(/\s/g, ''))) e.mobileNumber = 'Enter a valid mobile number';
       if (form.altNumber && !/^\+?\d{7,15}$/.test(form.altNumber.replace(/\s/g, ''))) e.altNumber = 'Enter a valid alternate number';
       if (!/^\d{11}$/.test(form.bvn)) e.bvn = 'BVN must be 11 digits';
       if (!/^\d{11}$/.test(form.nin)) e.nin = 'NIN must be 11 digits';
       if (!form.validId && !isEditMode) e.validId = 'Upload a valid means of ID';
+      if (!form.proofOfAddress && !isEditMode)
+        e.proofOfAddress = 'Upload a proof of address so we can verify the address above';
       if (!form.referredBy.trim()) e.referredBy = 'Referred by is required';
       if (!form.referralContact.trim()) e.referralContact = 'Referral contact number is required';
       else if (!/^\+?\d{7,15}$/.test(form.referralContact.replace(/\s/g, '')))
@@ -227,12 +348,23 @@ export function Apply() {
     }
 
     if (s === 1) {
-      if (!form.employerName.trim()) e.employerName = 'Employer name is required';
-      if (!form.officeAddress.trim()) e.officeAddress = 'Office address is required';
-      if (!isEditMode) {
-        if (!form.offerLetter) e.offerLetter = 'Upload your offer letter';
-        if (!form.bankStatement) e.bankStatement = 'Upload your 6-month bank statement';
-        if (!form.staffId) e.staffId = 'Upload your staff ID';
+      if (!form.employmentStatus) {
+        e.employmentStatus = 'Select your employment status';
+      } else if (form.employmentStatus === 'employed') {
+        if (!form.employerName.trim()) e.employerName = 'Employer name is required';
+        if (!form.officeAddress.trim()) e.officeAddress = 'Office address is required';
+        if (!isEditMode) {
+          if (!form.offerLetter) e.offerLetter = 'Upload your offer letter';
+          if (!form.bankStatement) e.bankStatement = 'Upload your 6-month bank statement';
+          if (!form.staffId) e.staffId = 'Upload your staff ID';
+        }
+      } else {
+        if (!form.referenceName.trim()) e.referenceName = "Your reference's full name is required";
+        if (!form.referenceRelationship.trim())
+          e.referenceRelationship = 'State your relationship with the reference';
+        if (!form.referencePhone.trim()) e.referencePhone = "Your reference's phone number is required";
+        else if (!/^\+?\d{7,15}$/.test(form.referencePhone.replace(/\s/g, '')))
+          e.referencePhone = 'Enter a valid phone number';
       }
     }
 
@@ -281,6 +413,12 @@ export function Apply() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    // Implicit submissions before the review step (Enter key, or the browser
+    // treating a re-rendered Continue button as submit) advance instead.
+    if (step < STEPS.length - 1) {
+      goNext();
+      return;
+    }
     setSubmitError(null);
 
     const allErrors = [0, 1, 2, 3].reduce<Record<string, string>>(
@@ -302,6 +440,7 @@ export function Apply() {
       fd.append('middleName', form.middleName.trim());
       fd.append('email', form.email.trim());
       fd.append('houseAddress', form.houseAddress.trim());
+      fd.append('country', form.country.trim());
       fd.append('lga', form.lga.trim());
       fd.append('state', form.state.trim());
       fd.append('mobileNumber', form.mobileNumber.trim());
@@ -324,13 +463,21 @@ export function Apply() {
           form.purposes.map((p) => ({ purpose: p, vendor: form.vendorIds[p] }))
         )
       );
-      fd.append('employerName', form.employerName.trim());
-      fd.append('officeAddress', form.officeAddress.trim());
+      const isEmployed = form.employmentStatus === 'employed';
+      fd.append('employmentStatus', form.employmentStatus || 'employed');
+      fd.append('employerName', isEmployed ? form.employerName.trim() : '');
+      fd.append('officeAddress', isEmployed ? form.officeAddress.trim() : '');
+      fd.append('referenceName', !isEmployed ? form.referenceName.trim() : '');
+      fd.append('referenceRelationship', !isEmployed ? form.referenceRelationship.trim() : '');
+      fd.append('referencePhone', !isEmployed ? form.referencePhone.trim() : '');
       fd.append('termsAccepted', 'true');
       if (form.validId) fd.append('validId', form.validId);
-      if (form.offerLetter) fd.append('offerLetter', form.offerLetter);
-      if (form.bankStatement) fd.append('bankStatement', form.bankStatement);
-      if (form.staffId) fd.append('staffId', form.staffId);
+      if (form.proofOfAddress) fd.append('proofOfAddress', form.proofOfAddress);
+      if (isEmployed) {
+        if (form.offerLetter) fd.append('offerLetter', form.offerLetter);
+        if (form.bankStatement) fd.append('bankStatement', form.bankStatement);
+        if (form.staffId) fd.append('staffId', form.staffId);
+      }
 
       const result = isEditMode && editId
         ? await applicationsApi.update(editId, fd)
@@ -367,6 +514,7 @@ export function Apply() {
           ? 'Application resubmitted — we’ll review again.'
           : 'Application submitted — we’ll be in touch.'
       );
+      setDirty(false);
       navigate('/applications');
     } catch (err) {
       setSubmitError(extractApiError(err, 'Could not submit application'));
@@ -409,7 +557,7 @@ export function Apply() {
 
       {!isEditMode && user && (
         <div className="alert alert-info">
-          We've pre-filled your name, email, and NIN from your account. Update them here if anything has changed.
+          We've pre-filled your name and email from your account. Update them here if anything has changed.
         </div>
       )}
 
@@ -425,7 +573,19 @@ export function Apply() {
       {submitError && <div className="alert alert-error">{submitError}</div>}
 
       <form onSubmit={handleSubmit} noValidate className="card">
-        {step === 0 && <PersonalStep form={form} update={update} errors={errors} />}
+        {step < 3 && (
+          <p className="form-required-hint">
+            Fields marked <span className="req-star">*</span> are required.
+          </p>
+        )}
+        {step === 0 && (
+          <PersonalStep
+            form={form}
+            update={update}
+            errors={errors}
+            geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
+          />
+        )}
         {step === 1 && <EmploymentStep form={form} update={update} errors={errors} />}
         {step === 2 && (
           <LoanStep
@@ -450,6 +610,12 @@ export function Apply() {
             errors={errors}
             breakdownTotal={breakdownTotal}
             loanAmountNum={loanAmountNum}
+            vendors={vendors}
+            isEditMode={isEditMode}
+            onEdit={(s) => {
+              setStep(s);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         )}
 
@@ -463,11 +629,11 @@ export function Apply() {
             Back
           </button>
           {step < STEPS.length - 1 ? (
-            <button type="button" className="btn" onClick={goNext}>
+            <button key="continue" type="button" className="btn" onClick={goNext}>
               Continue
             </button>
           ) : (
-            <button type="submit" className="btn" disabled={submitting}>
+            <button key="submit" type="submit" className="btn" disabled={submitting}>
               {submitting ? <span className="spinner" /> : 'Submit application'}
             </button>
           )}
@@ -483,42 +649,112 @@ interface StepProps {
   errors: Record<string, string>;
 }
 
-function PersonalStep({ form, update, errors }: StepProps) {
+function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists }) {
+  const stateListReady = geo.states.length > 0;
+  const cityListReady = geo.cities.length > 0;
   return (
     <div>
       <div className="section-title">Personal information</div>
 
       <div className="form-row-3">
-        <Field label="Surname" id="surname" error={errors.surname}>
+        <Field label="Surname" id="surname" error={errors.surname} required>
           <input id="surname" value={form.surname} onChange={(e) => update('surname', e.target.value)} aria-invalid={!!errors.surname} />
         </Field>
-        <Field label="First name" id="firstName" error={errors.firstName}>
+        <Field label="First name" id="firstName" error={errors.firstName} required>
           <input id="firstName" value={form.firstName} onChange={(e) => update('firstName', e.target.value)} aria-invalid={!!errors.firstName} />
         </Field>
-        <Field label="Middle name" id="middleName">
+        <Field label="Middle name" id="middleName" help="Optional">
           <input id="middleName" value={form.middleName} onChange={(e) => update('middleName', e.target.value)} />
         </Field>
       </div>
 
-      <Field label="Email address" id="email" error={errors.email}>
+      <Field label="Email address" id="email" error={errors.email} required>
         <input id="email" type="email" value={form.email} onChange={(e) => update('email', e.target.value)} aria-invalid={!!errors.email} />
       </Field>
 
-      <Field label="House address" id="houseAddress" error={errors.houseAddress}>
+      <Field label="House address" id="houseAddress" error={errors.houseAddress} required>
         <textarea id="houseAddress" value={form.houseAddress} onChange={(e) => update('houseAddress', e.target.value)} aria-invalid={!!errors.houseAddress} />
       </Field>
 
-      <div className="form-row">
-        <Field label="LGA" id="lga" error={errors.lga}>
-          <input id="lga" value={form.lga} onChange={(e) => update('lga', e.target.value)} aria-invalid={!!errors.lga} />
+      <div className="form-row-3">
+        <Field label="Country" id="country" error={errors.country} required>
+          <select
+            id="country"
+            value={form.country}
+            onChange={(e) => {
+              update('country', e.target.value);
+              update('state', '');
+              update('lga', '');
+            }}
+            aria-invalid={!!errors.country}
+          >
+            {geo.countries.length === 0 && <option value={form.country}>{form.country}</option>}
+            {geo.countries.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </Field>
-        <Field label="State" id="state" error={errors.state}>
-          <input id="state" value={form.state} onChange={(e) => update('state', e.target.value)} aria-invalid={!!errors.state} />
+        <Field label="State" id="state" error={errors.state} required>
+          {stateListReady || geo.statesLoading ? (
+            <select
+              id="state"
+              value={form.state}
+              onChange={(e) => {
+                update('state', e.target.value);
+                update('lga', '');
+              }}
+              disabled={geo.statesLoading}
+              aria-invalid={!!errors.state}
+            >
+              <option value="">{geo.statesLoading ? 'Loading states…' : 'Select a state'}</option>
+              {geo.states.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="state"
+              value={form.state}
+              onChange={(e) => update('state', e.target.value)}
+              placeholder="Type your state"
+              aria-invalid={!!errors.state}
+            />
+          )}
+        </Field>
+        <Field label="City / LGA" id="lga" error={errors.lga} required>
+          {!form.state || cityListReady || geo.citiesLoading ? (
+            <select
+              id="lga"
+              value={form.lga}
+              onChange={(e) => update('lga', e.target.value)}
+              disabled={!form.state || geo.citiesLoading}
+              aria-invalid={!!errors.lga}
+            >
+              <option value="">
+                {!form.state
+                  ? 'Select a state first'
+                  : geo.citiesLoading
+                  ? 'Loading…'
+                  : 'Select a city / LGA'}
+              </option>
+              {geo.cities.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              id="lga"
+              value={form.lga}
+              onChange={(e) => update('lga', e.target.value)}
+              placeholder="Type your city / LGA"
+              aria-invalid={!!errors.lga}
+            />
+          )}
         </Field>
       </div>
 
       <div className="form-row">
-        <Field label="Mobile number" id="mobileNumber" error={errors.mobileNumber}>
+        <Field label="Mobile number" id="mobileNumber" error={errors.mobileNumber} required>
           <input id="mobileNumber" inputMode="tel" value={form.mobileNumber} onChange={(e) => update('mobileNumber', e.target.value)} aria-invalid={!!errors.mobileNumber} />
         </Field>
         <Field label="Alternate number" id="altNumber" error={errors.altNumber} help="Optional">
@@ -526,11 +762,23 @@ function PersonalStep({ form, update, errors }: StepProps) {
         </Field>
       </div>
 
+      <FileUpload
+        label="Proof of address"
+        id="proofOfAddress"
+        file={form.proofOfAddress}
+        onChange={(f) => update('proofOfAddress', f)}
+        error={errors.proofOfAddress}
+        help="Recent utility bill, bank statement, or tenancy agreement showing the address above"
+        required
+      />
+
+      <div className="section-title" style={{ marginTop: '1rem' }}>Identity verification</div>
+
       <div className="form-row">
-        <Field label="BVN (11 digits)" id="bvn" error={errors.bvn}>
+        <Field label="BVN (11 digits)" id="bvn" error={errors.bvn} required>
           <input id="bvn" inputMode="numeric" maxLength={11} value={form.bvn} onChange={(e) => update('bvn', e.target.value.replace(/\D/g, ''))} aria-invalid={!!errors.bvn} />
         </Field>
-        <Field label="NIN (11 digits)" id="nin" error={errors.nin}>
+        <Field label="NIN (11 digits)" id="nin" error={errors.nin} help="We use this to verify your identity" required>
           <input id="nin" inputMode="numeric" maxLength={11} value={form.nin} onChange={(e) => update('nin', e.target.value.replace(/\D/g, ''))} aria-invalid={!!errors.nin} />
         </Field>
       </div>
@@ -542,13 +790,14 @@ function PersonalStep({ form, update, errors }: StepProps) {
         onChange={(f) => update('validId', f)}
         error={errors.validId}
         help="NIN slip, Driver's license, International passport, or Voter's card"
+        required
       />
 
       <div className="form-row">
-        <Field label="Referred by" id="referredBy" error={errors.referredBy}>
+        <Field label="Referred by" id="referredBy" error={errors.referredBy} required>
           <input id="referredBy" value={form.referredBy} onChange={(e) => update('referredBy', e.target.value)} aria-invalid={!!errors.referredBy} />
         </Field>
-        <Field label="Referral contact number" id="referralContact" error={errors.referralContact}>
+        <Field label="Referral contact number" id="referralContact" error={errors.referralContact} required>
           <input id="referralContact" inputMode="tel" value={form.referralContact} onChange={(e) => update('referralContact', e.target.value)} aria-invalid={!!errors.referralContact} />
         </Field>
       </div>
@@ -561,38 +810,94 @@ function EmploymentStep({ form, update, errors }: StepProps) {
     <div>
       <div className="section-title">Income declaration</div>
 
-      <Field label="Name of employer" id="employerName" error={errors.employerName}>
-        <input id="employerName" value={form.employerName} onChange={(e) => update('employerName', e.target.value)} aria-invalid={!!errors.employerName} />
-      </Field>
-
-      <Field label="Office address" id="officeAddress" error={errors.officeAddress}>
-        <textarea id="officeAddress" value={form.officeAddress} onChange={(e) => update('officeAddress', e.target.value)} aria-invalid={!!errors.officeAddress} />
-      </Field>
-
-      <div className="form-row">
-        <FileUpload
-          label="Offer letter"
-          id="offerLetter"
-          file={form.offerLetter}
-          onChange={(f) => update('offerLetter', f)}
-          error={errors.offerLetter}
-        />
-        <FileUpload
-          label="6 months bank statement"
-          id="bankStatement"
-          file={form.bankStatement}
-          onChange={(f) => update('bankStatement', f)}
-          error={errors.bankStatement}
-        />
+      <div className="form-group">
+        <label>
+          Are you currently working?<span className="req-star" aria-hidden="true"> *</span>
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+          <label className={`checkbox-row ${form.employmentStatus === 'employed' ? 'checked' : ''}`}>
+            <input
+              type="radio"
+              name="employmentStatus"
+              checked={form.employmentStatus === 'employed'}
+              onChange={() => update('employmentStatus', 'employed')}
+            />
+            <span>Yes, I'm employed</span>
+          </label>
+          <label className={`checkbox-row ${form.employmentStatus === 'not-working' ? 'checked' : ''}`}>
+            <input
+              type="radio"
+              name="employmentStatus"
+              checked={form.employmentStatus === 'not-working'}
+              onChange={() => update('employmentStatus', 'not-working')}
+            />
+            <span>No, not currently working</span>
+          </label>
+        </div>
+        {errors.employmentStatus && <span className="field-error">{errors.employmentStatus}</span>}
       </div>
 
-      <FileUpload
-        label="Staff ID"
-        id="staffId"
-        file={form.staffId}
-        onChange={(f) => update('staffId', f)}
-        error={errors.staffId}
-      />
+      {form.employmentStatus === 'employed' && (
+        <>
+          <Field label="Name of employer" id="employerName" error={errors.employerName} required>
+            <input id="employerName" value={form.employerName} onChange={(e) => update('employerName', e.target.value)} aria-invalid={!!errors.employerName} />
+          </Field>
+
+          <Field label="Office address" id="officeAddress" error={errors.officeAddress} required>
+            <textarea id="officeAddress" value={form.officeAddress} onChange={(e) => update('officeAddress', e.target.value)} aria-invalid={!!errors.officeAddress} />
+          </Field>
+
+          <div className="form-row">
+            <FileUpload
+              label="Offer letter"
+              id="offerLetter"
+              file={form.offerLetter}
+              onChange={(f) => update('offerLetter', f)}
+              error={errors.offerLetter}
+              required
+            />
+            <FileUpload
+              label="6 months bank statement"
+              id="bankStatement"
+              file={form.bankStatement}
+              onChange={(f) => update('bankStatement', f)}
+              error={errors.bankStatement}
+              required
+            />
+          </div>
+
+          <FileUpload
+            label="Staff ID"
+            id="staffId"
+            file={form.staffId}
+            onChange={(f) => update('staffId', f)}
+            error={errors.staffId}
+            required
+          />
+        </>
+      )}
+
+      {form.employmentStatus === 'not-working' && (
+        <>
+          <div className="alert alert-info">
+            Since you're not currently working, provide a valid reference — someone who can vouch
+            for you and stand behind your loan request. We'll contact them to confirm.
+          </div>
+
+          <Field label="Reference full name" id="referenceName" error={errors.referenceName} required>
+            <input id="referenceName" value={form.referenceName} onChange={(e) => update('referenceName', e.target.value)} aria-invalid={!!errors.referenceName} />
+          </Field>
+
+          <div className="form-row">
+            <Field label="Relationship to you" id="referenceRelationship" error={errors.referenceRelationship} help="e.g. Parent, Sibling, Employer of spouse, Community leader" required>
+              <input id="referenceRelationship" value={form.referenceRelationship} onChange={(e) => update('referenceRelationship', e.target.value)} aria-invalid={!!errors.referenceRelationship} />
+            </Field>
+            <Field label="Reference phone number" id="referencePhone" error={errors.referencePhone} required>
+              <input id="referencePhone" inputMode="tel" value={form.referencePhone} onChange={(e) => update('referencePhone', e.target.value)} aria-invalid={!!errors.referencePhone} />
+            </Field>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -637,7 +942,7 @@ function LoanStep({
     <div>
       <div className="section-title">Loan request</div>
 
-      <Field label="Loan amount (₦)" id="loanAmount" error={errors.loanAmount}>
+      <Field label="Loan amount (₦)" id="loanAmount" error={errors.loanAmount} required>
         <input
           id="loanAmount"
           inputMode="numeric"
@@ -649,7 +954,9 @@ function LoanStep({
       </Field>
 
       <div className="form-group">
-        <label>Purpose</label>
+        <label>
+          Purpose<span className="req-star" aria-hidden="true"> *</span>
+        </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
           {PURPOSES.map((p) => {
             const checked = form.purposes.includes(p);
@@ -716,7 +1023,9 @@ function LoanStep({
 
       {form.purposes.length > 0 && (
         <div className="form-group">
-          <label>Pick a partner vendor</label>
+          <label>
+            Pick a partner vendor<span className="req-star" aria-hidden="true"> *</span>
+          </label>
           <p className="field-help" style={{ margin: '0 0 0.5rem' }}>
             Select where you'll spend the loan. We pay the partner directly.
           </p>
@@ -767,43 +1076,89 @@ function LoanStep({
 interface ReviewStepProps extends StepProps {
   breakdownTotal: number;
   loanAmountNum: number;
+  vendors: Vendor[];
+  isEditMode: boolean;
+  onEdit: (step: number) => void;
 }
 
-function ReviewStep({ form, update, errors, breakdownTotal, loanAmountNum }: ReviewStepProps) {
+function ReviewStep({
+  form,
+  update,
+  errors,
+  breakdownTotal,
+  loanAmountNum,
+  vendors,
+  isEditMode,
+  onEdit,
+}: ReviewStepProps) {
+  const vendorName = (p: Purpose) => {
+    const v = vendors.find((x) => x._id === form.vendorIds[p]);
+    return v ? `${v.businessName} — ${v.area} (${v.partnerCode})` : '—';
+  };
+  const missingFileNote = isEditMode ? 'Keeping previously uploaded file' : 'Not uploaded';
+
   return (
     <div>
       <div className="section-title">Review & submit</div>
+      <p className="review-intro">
+        Almost done — confirm everything below is correct. Use <strong>Edit</strong> to jump back
+        to a section.
+      </p>
 
-      <ReviewBlock title="Personal">
-        <li><strong>Name:</strong> {form.surname} {form.firstName} {form.middleName}</li>
-        <li><strong>Email:</strong> {form.email}</li>
-        <li><strong>Address:</strong> {form.houseAddress}, {form.lga}, {form.state}</li>
-        <li><strong>Mobile:</strong> {form.mobileNumber}{form.altNumber ? ` · Alt: ${form.altNumber}` : ''}</li>
-        <li><strong>BVN:</strong> {form.bvn} · <strong>NIN:</strong> {form.nin}</li>
-        <li><strong>Valid ID file:</strong> {form.validId?.name || '—'}</li>
-        <li><strong>Referred by:</strong> {form.referredBy}{form.referralContact && ` (${form.referralContact})`}</li>
-      </ReviewBlock>
+      <div className="review-grid">
+        <ReviewCard title="Personal" onEdit={() => onEdit(0)}>
+          <ReviewRow label="Full name" value={[form.surname, form.firstName, form.middleName].filter(Boolean).join(' ')} />
+          <ReviewRow label="Email" value={form.email} />
+          <ReviewRow label="Address" value={[form.houseAddress, form.lga, form.state, form.country].filter(Boolean).join(', ')} />
+          <ReviewRow label="Mobile" value={`${form.mobileNumber}${form.altNumber ? ` · Alt: ${form.altNumber}` : ''}`} />
+          <ReviewRow label="BVN" value={form.bvn} />
+          <ReviewRow label="NIN" value={form.nin} />
+          <ReviewRow label="Referred by" value={form.referredBy ? `${form.referredBy}${form.referralContact ? ` (${form.referralContact})` : ''}` : ''} />
+          <div className="review-files">
+            <FileChip label="Valid ID" name={form.validId?.name} fallback={missingFileNote} />
+            <FileChip label="Proof of address" name={form.proofOfAddress?.name} fallback={missingFileNote} />
+          </div>
+        </ReviewCard>
 
-      <ReviewBlock title="Employment">
-        <li><strong>Employer:</strong> {form.employerName}</li>
-        <li><strong>Office:</strong> {form.officeAddress}</li>
-        <li><strong>Offer letter:</strong> {form.offerLetter?.name || '—'}</li>
-        <li><strong>Bank statement:</strong> {form.bankStatement?.name || '—'}</li>
-        <li><strong>Staff ID:</strong> {form.staffId?.name || '—'}</li>
-      </ReviewBlock>
+        <ReviewCard title="Employment" onEdit={() => onEdit(1)}>
+          <ReviewRow
+            label="Status"
+            value={form.employmentStatus === 'not-working' ? 'Not currently working' : 'Employed'}
+          />
+          {form.employmentStatus === 'not-working' ? (
+            <>
+              <ReviewRow label="Loan reference" value={`${form.referenceName}${form.referenceRelationship ? ` (${form.referenceRelationship})` : ''}`} />
+              <ReviewRow label="Reference phone" value={form.referencePhone} />
+            </>
+          ) : (
+            <>
+              <ReviewRow label="Employer" value={form.employerName} />
+              <ReviewRow label="Office address" value={form.officeAddress} />
+              <div className="review-files">
+                <FileChip label="Offer letter" name={form.offerLetter?.name} fallback={missingFileNote} />
+                <FileChip label="Bank statement" name={form.bankStatement?.name} fallback={missingFileNote} />
+                <FileChip label="Staff ID" name={form.staffId?.name} fallback={missingFileNote} />
+              </div>
+            </>
+          )}
+        </ReviewCard>
 
-      <ReviewBlock title="Loan request">
-        <li><strong>Amount:</strong> {formatNaira(loanAmountNum)}</li>
-        <li><strong>Purpose:</strong> {form.purposes.join(', ')}</li>
-        {form.purposes.length > 1 && (
-          <>
-            {form.purposes.map((p) => (
-              <li key={p}>— {p}: {formatNaira(Number(form.breakdown[p] || 0))}</li>
-            ))}
-            <li><strong>Breakdown total:</strong> {formatNaira(breakdownTotal)}</li>
-          </>
-        )}
-      </ReviewBlock>
+        <ReviewCard title="Loan request" onEdit={() => onEdit(2)}>
+          <ReviewRow label="Amount" value={formatNaira(loanAmountNum)} emphasis />
+          <ReviewRow label="Purpose" value={form.purposes.join(', ')} />
+          {form.purposes.length > 1 && (
+            <>
+              {form.purposes.map((p) => (
+                <ReviewRow key={p} label={`Amount for ${p}`} value={formatNaira(Number(form.breakdown[p] || 0))} />
+              ))}
+              <ReviewRow label="Breakdown total" value={formatNaira(breakdownTotal)} />
+            </>
+          )}
+          {form.purposes.map((p) => (
+            <ReviewRow key={`vendor-${p}`} label={`Vendor · ${p}`} value={vendorName(p)} />
+          ))}
+        </ReviewCard>
+      </div>
 
       <div className="form-group" style={{ marginTop: '1rem' }}>
         <label className={`checkbox-row ${form.termsAccepted ? 'checked' : ''}`}>
@@ -829,17 +1184,22 @@ function Field({
   id,
   error,
   help,
+  required,
   children,
 }: {
   label: string;
   id: string;
   error?: string;
   help?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="form-group">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {required && <span className="req-star" aria-hidden="true"> *</span>}
+      </label>
       {children}
       {error ? <span className="field-error">{error}</span> : help ? <span className="field-help">{help}</span> : null}
     </div>
@@ -853,6 +1213,7 @@ function FileUpload({
   onChange,
   error,
   help,
+  required,
 }: {
   label: string;
   id: string;
@@ -860,10 +1221,14 @@ function FileUpload({
   onChange: (f: File | null) => void;
   error?: string;
   help?: string;
+  required?: boolean;
 }) {
   return (
     <div className="form-group">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {required && <span className="req-star" aria-hidden="true"> *</span>}
+      </label>
       <label className={`file-drop ${file ? 'has-file' : ''}`}>
         <span className="file-drop-label">{file ? file.name : `Click to upload ${label.toLowerCase()}`}</span>
         <span className="file-drop-meta">
@@ -888,11 +1253,42 @@ function FileUpload({
   );
 }
 
-function ReviewBlock({ title, children }: { title: string; children: React.ReactNode }) {
+function ReviewCard({
+  title,
+  onEdit,
+  children,
+}: {
+  title: string;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div style={{ marginBottom: '1rem' }}>
-      <h3 style={{ marginBottom: '0.4rem' }}>{title}</h3>
-      <ul style={{ margin: 0, paddingLeft: '1.25rem', color: 'var(--gf-muted)' }}>{children}</ul>
+    <section className="review-card">
+      <div className="review-card-head">
+        <h3>{title}</h3>
+        <button type="button" className="review-edit-btn" onClick={onEdit}>
+          Edit
+        </button>
+      </div>
+      <div className="review-rows">{children}</div>
+    </section>
+  );
+}
+
+function ReviewRow({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className="review-row">
+      <span className="review-row-label">{label}</span>
+      <span className={`review-row-value${emphasis ? ' emphasis' : ''}`}>{value || '—'}</span>
     </div>
+  );
+}
+
+function FileChip({ label, name, fallback }: { label: string; name?: string; fallback: string }) {
+  return (
+    <span className={`file-chip ${name ? '' : 'missing'}`}>
+      <span className="file-chip-label">{label}</span>
+      {name || fallback}
+    </span>
   );
 }

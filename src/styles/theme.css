@@ -1062,3 +1062,264 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
 .footer-links a { color: var(--gf-muted); }
 .footer-links a:hover { color: var(--gf-green-700); }
 .footer-mark { width: 22px; height: 22px; border-radius: 6px; display: block; }
+
+/* ---------- Rotating category showcase (bottom of landing) ---------- */
+.cat-orbit-section {
+  position: relative;
+  overflow: hidden;
+  margin-top: 0;
+  padding: 4rem 0 4.5rem;
+  background:
+    radial-gradient(800px 480px at 18% 12%, rgba(54, 169, 103, 0.35), transparent 62%),
+    radial-gradient(700px 520px at 85% 85%, rgba(111, 191, 139, 0.22), transparent 60%),
+    var(--gf-green-900);
+  color: #fff;
+}
+.cat-orbit-section .section-heading { color: #fff; }
+.cat-orbit-sub {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.78);
+  max-width: 580px;
+  margin: 0 auto 2.75rem;
+  padding: 0 1.25rem;
+}
+
+/* 3D orbit — the ring spins continuously, cards face outward */
+.cat-orbit-scene {
+  perspective: 1400px;
+  height: 430px;
+  display: grid;
+  place-items: center;
+}
+.cat-orbit-ring {
+  position: relative;
+  width: 250px;
+  height: 360px;
+  transform-style: preserve-3d;
+  animation: catOrbit 32s linear infinite;
+  will-change: transform;
+}
+.cat-orbit-scene:hover .cat-orbit-ring,
+.cat-orbit-scene:focus-within .cat-orbit-ring {
+  animation-play-state: paused;
+}
+@keyframes catOrbit {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(-360deg); }
+}
+
+.cat-card {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(var(--cat-angle, 0deg)) translateZ(320px);
+  backface-visibility: hidden;
+  background: #fff;
+  color: var(--gf-ink);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.cat-chip {
+  align-self: flex-start;
+  background: var(--gf-green-100);
+  color: var(--gf-green-700);
+  border: 1px solid rgba(42, 138, 82, 0.25);
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.cat-visual {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(160deg, #eef7f1, #dff0e6);
+  border-radius: 12px;
+  font-size: 2.4rem;
+  padding: 1.5rem 0.5rem;
+}
+.cat-items {
+  margin: 0;
+  font-size: 0.83rem;
+  line-height: 1.5;
+  color: var(--gf-muted);
+}
+.cat-note {
+  margin-top: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--gf-warn);
+}
+
+/* Small screens: flatten the orbit into a swipeable row */
+@media (max-width: 720px) {
+  .cat-orbit-scene {
+    perspective: none;
+    height: auto;
+    display: block;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding: 0 1.25rem 1.5rem;
+  }
+  .cat-orbit-ring {
+    width: max-content;
+    height: auto;
+    animation: none;
+    transform: none;
+    display: flex;
+    gap: 1rem;
+  }
+  .cat-card {
+    position: static;
+    transform: none;
+    width: 250px;
+    min-height: 330px;
+    flex: 0 0 auto;
+    scroll-snap-align: center;
+  }
+  .cat-card-dup { display: none; }
+}
+
+/* Reduced motion: same flattened layout, no spin */
+@media (prefers-reduced-motion: reduce) {
+  .cat-orbit-scene {
+    perspective: none;
+    height: auto;
+    display: block;
+    overflow-x: auto;
+    padding: 0 1.25rem 1.5rem;
+  }
+  .cat-orbit-ring {
+    width: max-content;
+    height: auto;
+    animation: none !important;
+    transform: none !important;
+    display: flex;
+    gap: 1rem;
+  }
+  .cat-card {
+    position: static;
+    transform: none;
+    width: 250px;
+    min-height: 330px;
+    flex: 0 0 auto;
+  }
+  .cat-card-dup { display: none; }
+}
+
+/* ---------- Apply form: required markers + review redesign ---------- */
+.req-star {
+  color: var(--gf-danger);
+  font-weight: 700;
+}
+.form-required-hint {
+  margin: 0 0 1.25rem;
+  font-size: 0.82rem;
+  color: var(--gf-muted);
+}
+
+.review-intro {
+  margin: -0.25rem 0 1.1rem;
+  font-size: 0.9rem;
+  color: var(--gf-muted);
+}
+.review-grid {
+  display: grid;
+  gap: 1rem;
+}
+.review-card {
+  border: 1px solid var(--gf-border);
+  border-radius: var(--gf-radius);
+  background: #fff;
+  overflow: hidden;
+}
+.review-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  background: var(--gf-green-100);
+  border-bottom: 1px solid var(--gf-border);
+}
+.review-card-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--gf-green-900);
+}
+.review-edit-btn {
+  background: none;
+  border: 1px solid rgba(42, 138, 82, 0.35);
+  color: var(--gf-green-700);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+.review-edit-btn:hover {
+  background: rgba(42, 138, 82, 0.12);
+}
+.review-rows {
+  padding: 0.85rem 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.review-row {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  align-items: baseline;
+}
+.review-row-label {
+  color: var(--gf-muted);
+}
+.review-row-value {
+  font-weight: 600;
+  color: var(--gf-ink);
+  overflow-wrap: anywhere;
+}
+.review-row-value.emphasis {
+  font-size: 1.15rem;
+  color: var(--gf-green-700);
+}
+.review-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
+}
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: #f2f7f4;
+  border: 1px solid var(--gf-border);
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--gf-ink);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.file-chip-label {
+  font-weight: 700;
+  color: var(--gf-green-700);
+  white-space: nowrap;
+}
+.file-chip.missing {
+  color: var(--gf-muted);
+  font-style: italic;
+}
+@media (max-width: 560px) {
+  .review-row {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('/Users/praise-jah/peejay/grofin/server/models/Application'\\); require\\('/Users/praise-jah/peejay/grofin/server/models/User'\\); console.log\\('models OK'\\)\")",
+      "Bash(node --check /Users/praise-jah/peejay/grofin/server/routes/applications.js)",
+      "Bash(node --check /Users/praise-jah/peejay/grofin/server/routes/auth.js)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(BROWSER=none PORT=3000 npm run client)",
+      "Bash(timeout 120 bash -c 'until curl -sf http://localhost:3000 >/dev/null; do sleep 2; done')",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(lsof -ti:3000 -sTCP:LISTEN)",
+      "Bash(node -e \"require\\('playwright'\\); console.log\\('playwright ok'\\)\")",
+      "Bash(node -e \"require\\('/Users/praise-jah/peejay/grofin/node_modules/playwright'\\)\")",
+      "Bash(npm ls *)",
+      "Read(//Applications/**)",
+      "Bash(npm init *)",
+      "Bash(npm i *)",
+      "Bash(node shot.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/api/health)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8080/api/vendors)",
+      "Bash(curl -s http://localhost:8080/api/auth/login -X POST -H 'Content-Type: application/json' -d '{}' -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:8080/api/auth/register -X POST -H 'Content-Type: application/json' -d '{\"firstName\":\"Claude\",\"surname\":\"Test\",\"email\":\"claude.test.apply@example.com\",\"password\":\"test123\",\"acceptedTerms\":true}')",
+      "Bash(curl -s http://localhost:8080/api/vendors -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0')",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node apply-check.js)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node review-err.js)",
+      "Bash(curl -s -X POST https://countriesnow.space/api/v0.1/countries/states -H 'Content-Type: application/json' -d '{\"country\":\"Nigeria\"}')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\([s['name'] for s in d['data']['states']][:8]\\)\")",
+      "Bash(curl -s -X POST https://countriesnow.space/api/v0.1/countries/state/cities -H 'Content-Type: application/json' -d '{\"country\":\"Nigeria\",\"state\":\"Lagos State\"}')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('data', d.get\\('msg'\\)\\)[:8]\\)\")",
+      "Bash(curl -sv -X POST https://countriesnow.space/api/v0.1/countries/states -H 'Content-Type: application/json' -d '{\"country\":\"Nigeria\"}')",
+      "Bash(curl -s \"https://countriesnow.space/api/v0.1/countries/states/q?country=Nigeria\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\([s['name'] for s in d['data']['states']][:6]\\)\")",
+      "Bash(curl -s --get \"https://countriesnow.space/api/v0.1/countries/state/cities/q\" --data-urlencode \"country=Nigeria\" --data-urlencode \"state=Lagos State\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('data', d.get\\('msg'\\)\\)[:10]\\)\")",
+      "Bash(curl -s --get \"https://countriesnow.space/api/v0.1/countries/state/cities/q\" --data-urlencode \"country=Nigeria\" --data-urlencode \"state=Lagos\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(str\\(d.get\\('data', d.get\\('msg'\\)\\)\\)[:120]\\)\")",
+      "Bash(node --check server/routes/applications.js)",
+      "Bash(node -e \"require\\('./server/models/Application'\\)\")"
+    ]
+  }
+}

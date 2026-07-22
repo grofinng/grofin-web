@@ -24,7 +24,7 @@ export function Account() {
     if (!profile.firstName.trim()) return setProfileError('First name is required');
     if (!profile.surname.trim()) return setProfileError('Surname is required');
     if (!/^\S+@\S+\.\S+$/.test(profile.email)) return setProfileError('Enter a valid email');
-    if (isCustomer && !/^\d{11}$/.test(profile.nin)) {
+    if (isCustomer && profile.nin && !/^\d{11}$/.test(profile.nin)) {
       return setProfileError('NIN must be 11 digits');
     }
 
@@ -146,6 +146,9 @@ export function Account() {
                   setProfile({ ...profile, nin: e.target.value.replace(/\D/g, '').slice(0, 11) })
                 }
               />
+              <span className="field-help">
+                Optional here — we verify your identity with it when you apply for a loan.
+              </span>
             </div>
           )}
           <button type="submit" className="btn" disabled={savingProfile}>

@@ -39,6 +39,7 @@ const applicationSchema = new mongoose.Schema(
     middleName: { type: String, trim: true, default: '' },
     email: { type: String, required: true, trim: true, lowercase: true },
     houseAddress: { type: String, required: true, trim: true },
+    country: { type: String, trim: true, default: 'Nigeria' },
     lga: { type: String, required: true, trim: true },
     state: { type: String, required: true, trim: true },
     mobileNumber: { type: String, required: true, trim: true },
@@ -66,13 +67,57 @@ const applicationSchema = new mongoose.Schema(
       default: [],
     },
 
-    employerName: { type: String, required: true, trim: true },
-    officeAddress: { type: String, required: true, trim: true },
+    employmentStatus: {
+      type: String,
+      enum: ['employed', 'not-working'],
+      default: 'employed',
+    },
+    employerName: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return this.employmentStatus === 'employed';
+      },
+    },
+    officeAddress: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return this.employmentStatus === 'employed';
+      },
+    },
+    referenceName: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return this.employmentStatus === 'not-working';
+      },
+    },
+    referenceRelationship: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return this.employmentStatus === 'not-working';
+      },
+    },
+    referencePhone: {
+      type: String,
+      trim: true,
+      default: '',
+      required: function () {
+        return this.employmentStatus === 'not-working';
+      },
+    },
 
     offerLetter: fileSchema,
     bankStatement: fileSchema,
     staffId: fileSchema,
     validId: fileSchema,
+    proofOfAddress: fileSchema,
 
     termsAccepted: { type: Boolean, required: true },
 

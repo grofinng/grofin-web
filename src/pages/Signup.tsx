@@ -13,7 +13,6 @@ export function Signup() {
     firstName: '',
     surname: '',
     email: '',
-    nin: '',
     password: '',
     confirm: '',
   });
@@ -28,7 +27,6 @@ export function Signup() {
     if (!form.firstName.trim()) return 'First name is required';
     if (!form.surname.trim()) return 'Surname is required';
     if (!/^\S+@\S+\.\S+$/.test(form.email)) return 'Enter a valid email address';
-    if (!/^\d{11}$/.test(form.nin)) return 'NIN must be 11 digits';
     if (form.password.length < 6) return 'Password must be at least 6 characters';
     if (form.password !== form.confirm) return 'Passwords do not match';
     if (!acceptedTerms) return 'You must accept the Terms & Conditions to continue';
@@ -47,7 +45,6 @@ export function Signup() {
         firstName: form.firstName.trim(),
         surname: form.surname.trim(),
         email: form.email.trim().toLowerCase(),
-        nin: form.nin,
         password: form.password,
         acceptedTerms,
       });
@@ -85,20 +82,6 @@ export function Signup() {
           <div className="form-group">
             <label htmlFor="email">Email address</label>
             <input id="email" type="email" autoComplete="email" value={form.email} onChange={update('email')} required />
-          </div>
-          <div className="form-group">
-            <label htmlFor="nin">NIN (11 digits)</label>
-            <input
-              id="nin"
-              inputMode="numeric"
-              maxLength={11}
-              value={form.nin}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, nin: e.target.value.replace(/\D/g, '').slice(0, 11) }))
-              }
-              required
-            />
-            <span className="field-help">We use this to verify your identity for loan applications.</span>
           </div>
           <div className="form-row">
             <div className="form-group">

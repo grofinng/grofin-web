@@ -13,15 +13,12 @@ function signToken(id) {
 
 router.post('/register', async (req, res, next) => {
   try {
-    const { firstName, surname, email, password, nin, acceptedTerms } = req.body;
+    const { firstName, surname, email, password, acceptedTerms } = req.body;
     if (!firstName || !surname || !email || !password) {
       return res.status(400).json({ message: 'All fields are required' });
     }
     if (password.length < 6) {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
-    }
-    if (!/^\d{11}$/.test(String(nin || ''))) {
-      return res.status(400).json({ message: 'NIN must be 11 digits' });
     }
     if (acceptedTerms !== true && String(acceptedTerms) !== 'true') {
       return res.status(400).json({ message: 'You must accept the Terms & Conditions' });
@@ -34,7 +31,6 @@ router.post('/register', async (req, res, next) => {
       surname,
       email,
       password,
-      nin,
       termsAcceptedAt: new Date(),
     });
     const token = signToken(user._id);
@@ -94,10 +90,11 @@ router.patch('/profile', protect, async (req, res, next) => {
       }
     }
     if (nin !== undefined && user.role === 'user') {
-      if (!/^\d{11}$/.test(String(nin))) {
+      const value = String(nin).trim();
+      if (value && !/^\d{11}$/.test(value)) {
         return res.status(400).json({ message: 'NIN must be 11 digits' });
       }
-      user.nin = String(nin);
+      user.nin = value;
     }
 
     await user.save();

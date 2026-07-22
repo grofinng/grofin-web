@@ -21,7 +21,8 @@ const userSchema = new mongoose.Schema(
       validate: {
         validator: function (v) {
           if (this.role !== 'user') return true;
-          return /^\d{11}$/.test(v || '');
+          if (!v) return true;
+          return /^\d{11}$/.test(v);
         },
         message: 'NIN must be 11 digits',
       },

@@ -18,6 +18,40 @@ interface SampleCard {
   status: string;
 }
 
+interface ShopCategory {
+  label: string;
+  emoji: string;
+  items: string;
+  note?: string;
+}
+
+const SHOP_CATEGORIES: ShopCategory[] = [
+  {
+    label: 'Food & Beverages',
+    emoji: '🍚 🥫 🧃',
+    items:
+      'Staple foodstuffs, packaged foods, cooking ingredients, non-alcoholic beverages, infant formula & baby food.',
+  },
+  {
+    label: 'Household Consumables',
+    emoji: '🧼 🧴 🧻',
+    items: 'Cleaning products, hygiene products, toiletries, tissue & sanitary products.',
+  },
+  {
+    label: 'Pharmaceutical & Medical',
+    emoji: '💊 🩹 🩺',
+    items:
+      'Over-the-counter drugs, vitamins & supplements, medical devices, first aid supplies.',
+    note: 'Prescription medicines via licensed pharmacies only',
+  },
+  {
+    label: 'Agricultural Inputs',
+    emoji: '🌾 🌱 🚜',
+    items: 'Fertiliser and crop protection products.',
+    note: 'Approved agri-focused partners only',
+  },
+];
+
 export function Landing() {
   const { user } = useAuth();
   const ctaTo = user ? '/apply' : '/signup';
@@ -150,6 +184,36 @@ export function Landing() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="cat-orbit-section">
+        <h2 className="section-heading reveal">Essentials you can shop with Esena</h2>
+        <p className="cat-orbit-sub reveal reveal-2">
+          Your loan works across four categories of everyday essentials at our approved partner
+          stores.
+        </p>
+        <div className="cat-orbit-scene reveal reveal-3">
+          <div className="cat-orbit-ring">
+            {/* Categories rendered twice around the ring (45° apart) so the next
+                card is already peeking in while the current one faces front. */}
+            {[...SHOP_CATEGORIES, ...SHOP_CATEGORIES].map((c, i, all) => (
+              <article
+                key={`${c.label}-${i}`}
+                className={`cat-card${i >= SHOP_CATEGORIES.length ? ' cat-card-dup' : ''}`}
+                style={
+                  {
+                    ['--cat-angle' as string]: `${(360 / all.length) * i}deg`,
+                  } as CSSProperties
+                }
+              >
+                <span className="cat-chip">{c.label}</span>
+                <div className="cat-visual" aria-hidden="true">{c.emoji}</div>
+                <p className="cat-items">{c.items}</p>
+                {c.note && <span className="cat-note">{c.note}</span>}
+              </article>
+            ))}
           </div>
         </div>
       </section>

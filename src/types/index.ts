@@ -45,6 +45,8 @@ export interface StaffUser {
 
 export type ApplicationStatus = 'received' | 'processing' | 'approved' | 'rejected';
 
+export type EmploymentStatus = 'employed' | 'not-working';
+
 export interface PurposeBreakdownItem {
   purpose: Purpose;
   amount: number;
@@ -88,6 +90,7 @@ export interface Application {
   middleName?: string;
   email: string;
   houseAddress: string;
+  country?: string;
   lga: string;
   state: string;
   mobileNumber: string;
@@ -100,12 +103,17 @@ export interface Application {
   purposes: Purpose[];
   purposeBreakdown: PurposeBreakdownItem[];
   vendorSelections: VendorSelection[];
-  employerName: string;
-  officeAddress: string;
+  employmentStatus: EmploymentStatus;
+  employerName?: string;
+  officeAddress?: string;
+  referenceName?: string;
+  referenceRelationship?: string;
+  referencePhone?: string;
   offerLetter?: UploadedFile;
   bankStatement?: UploadedFile;
   staffId?: UploadedFile;
   validId?: UploadedFile;
+  proofOfAddress?: UploadedFile;
   termsAccepted: boolean;
   status: ApplicationStatus;
   statusNote?: string;

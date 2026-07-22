@@ -7,7 +7,6 @@ export const authApi = {
     surname: string;
     email: string;
     password: string;
-    nin: string;
     acceptedTerms: boolean;
   }) => api.post<AuthResponse>('/auth/register', data).then((r) => r.data),
   login: (data: { email: string; password: string }) =>

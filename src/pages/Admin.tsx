@@ -202,7 +202,7 @@ export function Admin() {
                         <div><strong>Name</strong>{a.surname} {a.firstName} {a.middleName}</div>
                         <div><strong>Email</strong>{a.email}</div>
                         <div><strong>Mobile</strong>{a.mobileNumber}{a.altNumber && ` · ${a.altNumber}`}</div>
-                        <div><strong>Address</strong>{a.houseAddress}, {a.lga}, {a.state}</div>
+                        <div><strong>Address</strong>{a.houseAddress}, {a.lga}, {a.state}{a.country ? `, ${a.country}` : ''}</div>
                         <div><strong>BVN</strong>{a.bvn}</div>
                         <div><strong>NIN</strong>{a.nin}</div>
                         <div><strong>Referred by</strong>{a.referredBy}{a.referralContact && ` (${a.referralContact})`}</div>
@@ -210,8 +210,25 @@ export function Admin() {
 
                       <h3>Employment</h3>
                       <div className="detail-grid">
-                        <div><strong>Employer</strong>{a.employerName}</div>
-                        <div><strong>Office</strong>{a.officeAddress}</div>
+                        <div>
+                          <strong>Status</strong>
+                          {a.employmentStatus === 'not-working' ? 'Not currently working' : 'Employed'}
+                        </div>
+                        {a.employmentStatus === 'not-working' ? (
+                          <>
+                            <div>
+                              <strong>Loan reference</strong>
+                              {a.referenceName || '—'}
+                              {a.referenceRelationship && ` (${a.referenceRelationship})`}
+                            </div>
+                            <div><strong>Reference phone</strong>{a.referencePhone || '—'}</div>
+                          </>
+                        ) : (
+                          <>
+                            <div><strong>Employer</strong>{a.employerName}</div>
+                            <div><strong>Office</strong>{a.officeAddress}</div>
+                          </>
+                        )}
                       </div>
 
                       <h3>Loan</h3>
@@ -259,6 +276,7 @@ export function Admin() {
                       <h3>Documents</h3>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {a.validId && <DocLink label="Valid ID" path={a.validId.path} />}
+                        {a.proofOfAddress && <DocLink label="Proof of address" path={a.proofOfAddress.path} />}
                         {a.offerLetter && <DocLink label="Offer letter" path={a.offerLetter.path} />}
                         {a.bankStatement && <DocLink label="Bank statement" path={a.bankStatement.path} />}
                         {a.staffId && <DocLink label="Staff ID" path={a.staffId.path} />}
