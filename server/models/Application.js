@@ -46,9 +46,6 @@ const applicationSchema = new mongoose.Schema(
     altNumber: { type: String, trim: true, default: '' },
     bvn: { type: String, required: true, trim: true, match: [/^\d{11}$/, 'BVN must be 11 digits'] },
     nin: { type: String, required: true, trim: true, match: [/^\d{11}$/, 'NIN must be 11 digits'] },
-    referredBy: { type: String, required: true, trim: true },
-    referralContact: { type: String, required: true, trim: true },
-
     loanAmount: { type: Number, required: true, min: 1 },
     interestRate: { type: Number, default: 20, min: 0 },
     purposes: {

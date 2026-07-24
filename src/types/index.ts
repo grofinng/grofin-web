@@ -105,8 +105,6 @@ export interface Application {
   altNumber?: string;
   bvn: string;
   nin: string;
-  referredBy: string;
-  referralContact?: string;
   loanAmount: number;
   purposes: Purpose[];
   purposeBreakdown: PurposeBreakdownItem[];

@@ -36,8 +36,6 @@ interface ApplyFormState {
   nin: string;
   validId: File | null;
   proofOfAddress: File | null;
-  referredBy: string;
-  referralContact: string;
   loanAmount: string;
   purposes: Purpose[];
   breakdown: Record<Purpose, string>;
@@ -128,8 +126,6 @@ export function Apply() {
           nin: app.nin,
           validId: null,
           proofOfAddress: null,
-          referredBy: app.referredBy,
-          referralContact: app.referralContact || '',
           loanAmount: String(app.loanAmount),
           purposes: app.purposes,
           breakdown,
@@ -173,8 +169,6 @@ export function Apply() {
     nin: user?.nin || '',
     validId: null,
     proofOfAddress: null,
-    referredBy: '',
-    referralContact: '',
     loanAmount: '',
     purposes: [],
     breakdown: { Groceries: '', Medications: '', Other: '' },
@@ -419,11 +413,6 @@ export function Apply() {
       if (!form.validId && !isEditMode) e.validId = 'Upload a valid means of ID';
       if (!form.proofOfAddress && !isEditMode)
         e.proofOfAddress = 'Upload a proof of address so we can verify the address above';
-      if (!form.referredBy.trim()) e.referredBy = 'Referred by is required';
-      if (!form.referralContact.trim()) e.referralContact = 'Referral contact number is required';
-      else if (!/^\+?\d{7,15}$/.test(form.referralContact.replace(/\s/g, '')))
-        e.referralContact = 'Enter a valid referral contact';
-
       if (!form.employmentStatus) {
         e.employmentStatus = 'Select your employment status';
       } else if (form.employmentStatus === 'employed') {
@@ -531,8 +520,6 @@ export function Apply() {
       fd.append('altNumber', form.altNumber.trim());
       fd.append('bvn', form.bvn.trim());
       fd.append('nin', form.nin.trim());
-      fd.append('referredBy', form.referredBy.trim());
-      fd.append('referralContact', form.referralContact.trim());
       fd.append('loanAmount', String(loanAmountNum));
       fd.append('purposes', JSON.stringify(form.purposes));
       fd.append(
@@ -886,15 +873,6 @@ function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists
         help="NIN slip, Driver's license, International passport, or Voter's card"
         required
       />
-
-      <div className="form-row">
-        <Field label="Referred by" id="referredBy" error={errors.referredBy} required>
-          <input id="referredBy" value={form.referredBy} onChange={(e) => update('referredBy', e.target.value)} aria-invalid={!!errors.referredBy} />
-        </Field>
-        <Field label="Referral contact number" id="referralContact" error={errors.referralContact} required>
-          <input id="referralContact" inputMode="tel" value={form.referralContact} onChange={(e) => update('referralContact', e.target.value)} aria-invalid={!!errors.referralContact} />
-        </Field>
-      </div>
     </div>
   );
 }
@@ -1305,7 +1283,6 @@ function ReviewStep({
           <ReviewRow label="Mobile" value={`${form.mobileNumber}${form.altNumber ? ` · Alt: ${form.altNumber}` : ''}`} />
           <ReviewRow label="BVN" value={form.bvn} />
           <ReviewRow label="NIN" value={form.nin} />
-          <ReviewRow label="Referred by" value={form.referredBy ? `${form.referredBy}${form.referralContact ? ` (${form.referralContact})` : ''}` : ''} />
           <div className="review-files">
             <FileChip label="Valid ID" name={form.validId?.name} fallback={missingFileNote} />
             <FileChip label="Proof of address" name={form.proofOfAddress?.name} fallback={missingFileNote} />

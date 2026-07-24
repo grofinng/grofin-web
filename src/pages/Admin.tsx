@@ -237,7 +237,6 @@ export function Admin() {
                         <div><strong>Address</strong>{a.houseAddress}, {a.lga}, {a.state}{a.country ? `, ${a.country}` : ''}</div>
                         <div><strong>BVN</strong>{a.bvn}</div>
                         <div><strong>NIN</strong>{a.nin}</div>
-                        <div><strong>Referred by</strong>{a.referredBy}{a.referralContact && ` (${a.referralContact})`}</div>
                       </div>
 
                       <h3>Employment</h3>

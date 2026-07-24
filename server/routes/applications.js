@@ -97,8 +97,6 @@ router.post('/', protect, (req, res, next) => {
         altNumber: body.altNumber,
         bvn: body.bvn,
         nin: body.nin,
-        referredBy: body.referredBy,
-        referralContact: body.referralContact,
         loanAmount: Number(body.loanAmount),
         purposes,
         purposeBreakdown: (purposeBreakdown || []).map((p) => ({
@@ -263,8 +261,6 @@ router.patch('/:id', protect, (req, res, next) => {
         altNumber: body.altNumber ?? existing.altNumber,
         bvn: body.bvn ?? existing.bvn,
         nin: body.nin ?? existing.nin,
-        referredBy: body.referredBy ?? existing.referredBy,
-        referralContact: body.referralContact ?? existing.referralContact,
         loanAmount: body.loanAmount !== undefined ? Number(body.loanAmount) : existing.loanAmount,
         purposes: purposes ?? existing.purposes,
         purposeBreakdown: purposeBreakdown
