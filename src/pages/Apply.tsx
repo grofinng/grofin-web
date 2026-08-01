@@ -9,6 +9,11 @@ import { extractApiError } from '../api/client';
 import { Bank, EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor, VendorPurpose } from '../types';
 import { banksApi } from '../api/banks';
 import { totalRepayable } from '../utils/loan';
+import { compressImageFile } from '../utils/compressImage';
+
+// Vercel serverless functions reject request bodies over ~4.5 MB with a 413,
+// so keep the combined upload comfortably under that.
+const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
 import { formatNaira } from '../utils/format';
 import { emailNotifications } from '../utils/email';
 import { geoApi } from '../api/geo';
@@ -505,6 +510,24 @@ export function Apply() {
       return;
     }
 
+    const attachedFiles = [
+      form.validId,
+      form.proofOfAddress,
+      form.offerLetter,
+      form.bankStatement,
+      form.staffId,
+    ].filter(Boolean) as File[];
+    const totalUpload = attachedFiles.reduce((sum, f) => sum + f.size, 0);
+    if (totalUpload > MAX_TOTAL_UPLOAD_BYTES) {
+      setSubmitError(
+        `Your documents add up to ${(totalUpload / (1024 * 1024)).toFixed(1)} MB, which is over the ${(
+          MAX_TOTAL_UPLOAD_BYTES / (1024 * 1024)
+        ).toFixed(0)} MB upload limit. Photos are compressed automatically, so a large PDF is usually the cause — please replace it with a smaller file.`
+      );
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     setSubmitting(true);
     try {
       const fd = new FormData();
@@ -593,7 +616,12 @@ export function Apply() {
       setDirty(false);
       navigate('/applications');
     } catch (err) {
-      setSubmitError(extractApiError(err, 'Could not submit application'));
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setSubmitError(
+        status === 413
+          ? 'Your uploaded documents are too large to send. Please re-upload smaller files (large PDFs are usually the cause) and try again.'
+          : extractApiError(err, 'Could not submit application')
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1416,9 +1444,11 @@ function FileUpload({
           id={id}
           type="file"
           accept="application/pdf,image/png,image/jpeg"
-          onChange={(e) => {
-            const f = e.target.files?.[0] || null;
-            if (f && f.size > 5 * 1024 * 1024) {
+          onChange={async (e) => {
+            const raw = e.target.files?.[0] || null;
+            if (!raw) return onChange(null);
+            const f = await compressImageFile(raw);
+            if (f.size > 5 * 1024 * 1024) {
               onChange(null);
               return;
             }

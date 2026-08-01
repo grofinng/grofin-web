@@ -45,7 +45,17 @@
       "Bash(lsof -ti:8080 -sTCP:LISTEN)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node other-check.js)",
       "Bash(node -e ' *)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node compress-check.js)",
+      "Bash(sed -i '' \"s/await page.waitForSelector\\('#validId'\\);/await page.waitForSelector\\('#surname'\\);/\" compress-check.js)",
+      "Bash(curl -s -o /dev/null -w \"client:%{http_code}\\\\n\" http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w \"api:%{http_code}\\\\n\" http://localhost:8080/api/health)",
+      "Bash(lsof -i:3000 -sTCP:LISTEN)",
+      "Bash(sed -i '' 's|http://localhost:3000/apply|http://localhost:3001/apply|' compress-check.js)",
+      "Bash(sed -i '' 's|http://localhost:3000/apply|http://localhost:3001/apply|' debug-page.js)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node debug-page.js)",
+      "Bash(curl -s -o /dev/null -w 'me:%{http_code}\\\\n' http://localhost:8080/api/auth/me -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0')",
+      "Bash(curl -s http://localhost:8080/api/auth/login -X POST -H 'Content-Type: application/json' -d '{\"email\":\"claude.test.apply@example.com\",\"password\":\"test123\"}')"
     ]
   }
 }
