@@ -23,7 +23,9 @@ async function send(template: string, params: Record<string, unknown>) {
     return null;
   }
   try {
-    return await emailjs.send(SERVICE_ID, template, params, { publicKey: PUBLIC_KEY });
+    // Templates may greet with either {{name}} or {{to_name}} — send both.
+    const withAliases = { name: params.to_name, ...params };
+    return await emailjs.send(SERVICE_ID, template, withAliases, { publicKey: PUBLIC_KEY });
   } catch (err) {
     console.error('[Esena Africa] EmailJS send failed', err);
     return null;
