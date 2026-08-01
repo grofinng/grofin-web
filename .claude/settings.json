@@ -55,7 +55,8 @@
       "Bash(sed -i '' 's|http://localhost:3000/apply|http://localhost:3001/apply|' debug-page.js)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node debug-page.js)",
       "Bash(curl -s -o /dev/null -w 'me:%{http_code}\\\\n' http://localhost:8080/api/auth/me -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0')",
-      "Bash(curl -s http://localhost:8080/api/auth/login -X POST -H 'Content-Type: application/json' -d '{\"email\":\"claude.test.apply@example.com\",\"password\":\"test123\"}')"
+      "Bash(curl -s http://localhost:8080/api/auth/login -X POST -H 'Content-Type: application/json' -d '{\"email\":\"claude.test.apply@example.com\",\"password\":\"test123\"}')",
+      "Bash(npm run *)"
     ]
   }
 }

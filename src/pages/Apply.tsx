@@ -10,13 +10,13 @@ import { Bank, EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor,
 import { banksApi } from '../api/banks';
 import { totalRepayable } from '../utils/loan';
 import { compressImageFile } from '../utils/compressImage';
+import { formatNaira } from '../utils/format';
+import { emailNotifications } from '../utils/email';
+import { geoApi } from '../api/geo';
 
 // Vercel serverless functions reject request bodies over ~4.5 MB with a 413,
 // so keep the combined upload comfortably under that.
 const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
-import { formatNaira } from '../utils/format';
-import { emailNotifications } from '../utils/email';
-import { geoApi } from '../api/geo';
 
 interface GeoLists {
   countries: string[];
