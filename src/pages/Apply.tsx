@@ -293,8 +293,16 @@ export function Apply() {
       .catch((err: unknown) => {
         if (cancelled) return;
         const status = (err as { response?: { status?: number } })?.response?.status;
-        // 503 = no verification key configured server-side → let them type it in.
-        setAccountStatus(status === 503 ? 'manual' : 'failed');
+        // 503 = verification unavailable server-side → let them type it in.
+        if (status === 503) {
+          setAccountStatus('manual');
+        } else {
+          setAccountStatus('failed');
+          setErrors((prev) => ({
+            ...prev,
+            accountNumber: extractApiError(err, 'Could not verify this account — check the number and bank'),
+          }));
+        }
       });
     return () => {
       cancelled = true;

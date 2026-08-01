@@ -45,11 +45,22 @@ router.get('/resolve', protect, async (req, res, next) => {
       `https://api.paystack.co/bank/resolve?account_number=${accountNumber}&bank_code=${encodeURIComponent(bankCode)}`,
       { headers: { Authorization: `Bearer ${key}` } }
     );
-    const json = await r.json();
-    if (!json.status) {
+    const json = await r.json().catch(() => ({}));
+    // Key problems (invalid/revoked key, feature not enabled) are our
+    // configuration issue, not the customer's — fall back to manual entry.
+    if (r.status === 401 || r.status === 403) {
+      console.error('Paystack resolve auth error:', r.status, json.message);
       return res
-        .status(422)
-        .json({ message: 'Could not verify this account number with the selected bank' });
+        .status(503)
+        .json({ message: 'Account verification is temporarily unavailable', manual: true });
+    }
+    if (!r.ok || !json.status || !json.data?.account_name) {
+      console.error('Paystack resolve failed:', r.status, json.message);
+      return res.status(422).json({
+        message: json.message
+          ? `Could not verify this account: ${json.message}`
+          : 'Could not verify this account number with the selected bank',
+      });
     }
     res.json({ accountName: json.data.account_name });
   } catch (err) {
