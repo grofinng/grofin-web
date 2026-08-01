@@ -107,10 +107,9 @@ router.post('/', protect, (req, res, next) => {
           purpose: p.purpose,
           amount: Number(p.amount),
         })),
-        vendorSelections: (vendorSelections || []).map((v) => ({
-          purpose: v.purpose,
-          vendor: v.vendor,
-        })),
+        vendorSelections: (vendorSelections || [])
+          .filter((v) => v && v.vendor)
+          .map((v) => ({ purpose: v.purpose, vendor: v.vendor })),
         employmentStatus,
         employerName: employmentStatus === 'employed' ? body.employerName : '',
         officeAddress: employmentStatus === 'employed' ? body.officeAddress : '',
@@ -271,7 +270,9 @@ router.patch('/:id', protect, (req, res, next) => {
           ? purposeBreakdown.map((p) => ({ purpose: p.purpose, amount: Number(p.amount) }))
           : existing.purposeBreakdown,
         vendorSelections: vendorSelections
-          ? vendorSelections.map((v) => ({ purpose: v.purpose, vendor: v.vendor }))
+          ? vendorSelections
+              .filter((v) => v && v.vendor)
+              .map((v) => ({ purpose: v.purpose, vendor: v.vendor }))
           : existing.vendorSelections,
         employmentStatus: body.employmentStatus ?? existing.employmentStatus,
         employerName: body.employerName ?? existing.employerName,

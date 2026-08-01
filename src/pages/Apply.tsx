@@ -24,6 +24,10 @@ const MB = 1024 * 1024;
 type FileField = 'validId' | 'proofOfAddress' | 'offerLetter' | 'bankStatement' | 'staffId';
 const FILE_FIELDS: FileField[] = ['validId', 'proofOfAddress', 'offerLetter', 'bankStatement', 'staffId'];
 
+// Draft autosave: everything except files survives a reload.
+const DRAFT_VERSION = 1;
+const DRAFT_MAX_AGE_MS = 48 * 60 * 60 * 1000;
+
 interface GeoLists {
   countries: CountryOption[];
   states: string[];
@@ -165,7 +169,7 @@ export function Apply() {
     };
   }, [editId]);
 
-  const [form, setForm] = useState<ApplyFormState>({
+  const freshForm = (): ApplyFormState => ({
     surname: user?.surname || '',
     firstName: user?.firstName || '',
     middleName: '',
@@ -200,6 +204,8 @@ export function Apply() {
     staffId: null,
     termsAccepted: false,
   });
+
+  const [form, setForm] = useState<ApplyFormState>(freshForm);
 
   // Country → state → city/LGA lists come from the CountriesNow API (cached in
   // src/api/geo.ts, with a bundled Nigeria fallback when the API is down).
@@ -316,6 +322,64 @@ export function Apply() {
   // beforeunload, in-app navigation via a capture-phase interceptor on links
   // (BrowserRouter has no useBlocker support).
   const [dirty, setDirty] = useState(false);
+
+  // --- Draft autosave: a reload no longer wipes the form. Files can't be
+  // serialized, so they are the one thing the applicant must re-attach.
+  const draftKey = user && !isEditMode ? `esena_apply_draft_${user.id}` : null;
+  const [draftRestored, setDraftRestored] = useState(false);
+
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const draft = JSON.parse(raw) as { v: number; savedAt: number; fields: Partial<ApplyFormState> };
+      if (draft.v !== DRAFT_VERSION || Date.now() - (draft.savedAt || 0) > DRAFT_MAX_AGE_MS) {
+        localStorage.removeItem(draftKey);
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        ...draft.fields,
+        validId: null,
+        proofOfAddress: null,
+        offerLetter: null,
+        bankStatement: null,
+        staffId: null,
+        termsAccepted: false,
+      }));
+      setDraftRestored(true);
+      setDirty(true);
+    } catch {
+      /* corrupted draft — start clean */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!draftKey || !dirty) return;
+    const timer = window.setTimeout(() => {
+      const { validId, proofOfAddress, offerLetter, bankStatement, staffId, termsAccepted, ...fields } = form;
+      try {
+        localStorage.setItem(
+          draftKey,
+          JSON.stringify({ v: DRAFT_VERSION, savedAt: Date.now(), fields })
+        );
+      } catch {
+        /* storage full — drafts are best-effort */
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [form, dirty, draftKey]);
+
+  const discardDraft = () => {
+    if (draftKey) localStorage.removeItem(draftKey);
+    setForm(freshForm());
+    setErrors({});
+    setStep(0);
+    setDraftRestored(false);
+    setDirty(false);
+  };
   useEffect(() => {
     if (!dirty) return;
     const message = 'You have an unfinished loan application. Leave this page? Your progress will be lost.';
@@ -592,7 +656,10 @@ export function Apply() {
       fd.append(
         'vendorSelections',
         JSON.stringify(
-          form.purposes.map((p) => ({ purpose: p, vendor: form.vendorIds[p] }))
+          // 'Other' has no vendor — an empty vendor id would fail ObjectId casting
+          form.purposes
+            .filter((p) => p !== 'Other' && form.vendorIds[p])
+            .map((p) => ({ purpose: p, vendor: form.vendorIds[p] }))
         )
       );
       const isEmployed = form.employmentStatus === 'employed';
@@ -652,6 +719,7 @@ export function Apply() {
           : 'Application submitted — we’ll be in touch.'
       );
       setDirty(false);
+      if (draftKey) localStorage.removeItem(draftKey);
       navigate('/applications');
     } catch (err) {
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -697,9 +765,24 @@ export function Apply() {
         </p>
       </div>
 
-      {!isEditMode && user && (
+      {!isEditMode && user && !draftRestored && (
         <div className="alert alert-info">
           We've pre-filled your name and email from your account. Update them here if anything has changed.
+        </div>
+      )}
+
+      {draftRestored && (
+        <div
+          className="alert alert-info"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}
+        >
+          <span>
+            We restored the draft you were working on. For security your documents aren't saved —
+            please re-attach them before submitting.
+          </span>
+          <button type="button" className="btn btn-ghost" onClick={discardDraft}>
+            Start fresh
+          </button>
         </div>
       )}
 
