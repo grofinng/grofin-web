@@ -1,5 +1,6 @@
 const express = require('express');
 const { put } = require('@vercel/blob');
+const BLOB_ACCESS = process.env.BLOB_ACCESS === 'public' ? 'public' : 'private';
 const VendorRequest = require('../models/VendorRequest');
 const Vendor = require('../models/Vendor');
 const upload = require('../middleware/upload');
@@ -16,7 +17,7 @@ async function fileFromMulter(file, prefix) {
   if (!file) return undefined;
   const safeOriginal = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
   const blob = await put(`vendor-requests/${prefix}-${Date.now()}-${safeOriginal}`, file.buffer, {
-    access: 'public',
+    access: BLOB_ACCESS,
     contentType: file.mimetype,
     addRandomSuffix: true,
   });

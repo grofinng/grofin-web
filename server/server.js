@@ -37,6 +37,7 @@ app.use('/api/vendor-requests', vendorRequestRoutes);
 app.use('/api/contact-requests', contactRequestRoutes);
 app.use('/api/impact-stats', impactStatRoutes);
 app.use('/api/banks', bankRoutes);
+app.use('/api/files', require('./routes/files'));
 
 app.use((err, _req, res, _next) => {
   console.error(err);

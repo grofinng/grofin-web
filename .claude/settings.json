@@ -60,7 +60,13 @@
       "Bash(grep -n \"form-row\\\\b\\\\|form-row-3\\\\|^select\\\\|input\\\\[\\\\|select {\\\\|select,\" /Users/praise-jah/peejay/grofin/src/styles/theme.css)",
       "Bash(grep -n -B2 -A8 \"input\\\\b.*,.*select\\\\|select.*{\" /Users/praise-jah/peejay/grofin/src/styles/theme.css)",
       "Bash(curl -s -o /dev/null -w \"client:%{http_code} api:\" http://localhost:3001)",
-      "Bash(xargs -r kill)"
+      "Bash(xargs -r kill)",
+      "Bash(npm view *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('latest:', d['version']\\)\")",
+      "Bash(npm --prefix server i @vercel/blob@latest --no-audit --no-fund)",
+      "Bash(node -e \"const b = require\\('@vercel/blob'\\); console.log\\('exports:', ['put','get','del','head'].filter\\(k => typeof b[k] === 'function'\\).join\\(','\\)\\)\")",
+      "Bash(node --check server/routes/files.js)",
+      "Bash(node -e \"const app = require\\('./server'\\); console.log\\('app loads, routes mounted OK'\\)\")"
     ]
   }
 }

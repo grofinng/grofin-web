@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { vendorRequestsApi } from '../api/vendorRequests';
 import { contactRequestsApi } from '../api/contactRequests';
-import { extractApiError, fileUrl } from '../api/client';
+import { extractApiError } from '../api/client';
+import { FileLink } from '../components/FileLink';
 import { ContactRequest, VendorRequest, VendorRequestStatus } from '../types';
 import { formatDate } from '../utils/format';
 
@@ -249,16 +250,8 @@ export function AdminRequests() {
                         <>
                           <h3>Photos</h3>
                           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {r.storefrontPhoto && (
-                              <a className="btn btn-secondary" href={fileUrl(r.storefrontPhoto.path)} target="_blank" rel="noreferrer">
-                                Store front
-                              </a>
-                            )}
-                            {r.goodsPhoto && (
-                              <a className="btn btn-secondary" href={fileUrl(r.goodsPhoto.path)} target="_blank" rel="noreferrer">
-                                Goods inside
-                              </a>
-                            )}
+                            {r.storefrontPhoto && <FileLink label="Store front" file={r.storefrontPhoto} />}
+                            {r.goodsPhoto && <FileLink label="Goods inside" file={r.goodsPhoto} />}
                           </div>
                         </>
                       )}

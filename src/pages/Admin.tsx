@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { applicationsApi } from '../api/applications';
-import { extractApiError, fileUrl } from '../api/client';
+import { extractApiError } from '../api/client';
+import { FileLink } from '../components/FileLink';
 import { Application, ApplicationStatus, PopulatedUserRef, Vendor } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
 import { DEFAULT_INTEREST_RATE, totalRepayable } from '../utils/loan';
@@ -330,11 +331,11 @@ export function Admin() {
 
                       <h3>Documents</h3>
                       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {a.validId && <DocLink label="Valid ID" path={a.validId.path} />}
-                        {a.proofOfAddress && <DocLink label="Proof of address" path={a.proofOfAddress.path} />}
-                        {a.offerLetter && <DocLink label="Offer letter" path={a.offerLetter.path} />}
-                        {a.bankStatement && <DocLink label="Bank statement" path={a.bankStatement.path} />}
-                        {a.staffId && <DocLink label="Staff ID" path={a.staffId.path} />}
+                        {a.validId && <FileLink label="Valid ID" file={a.validId} />}
+                        {a.proofOfAddress && <FileLink label="Proof of address" file={a.proofOfAddress} />}
+                        {a.offerLetter && <FileLink label="Offer letter" file={a.offerLetter} />}
+                        {a.bankStatement && <FileLink label="Bank statement" file={a.bankStatement} />}
+                        {a.staffId && <FileLink label="Staff ID" file={a.staffId} />}
                       </div>
 
                       {isReadOnly ? (
@@ -471,10 +472,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function DocLink({ label, path }: { label: string; path: string }) {
-  return (
-    <a className="btn btn-secondary" href={fileUrl(path)} target="_blank" rel="noreferrer">
-      {label}
-    </a>
-  );
-}

@@ -1,5 +1,9 @@
 const express = require('express');
 const { put } = require('@vercel/blob');
+// Must match how the connected Blob store was created (ours is private —
+// loan documents are sensitive). Override with BLOB_ACCESS=public if the
+// store is ever recreated as public.
+const BLOB_ACCESS = process.env.BLOB_ACCESS === 'public' ? 'public' : 'private';
 const Application = require('../models/Application');
 const upload = require('../middleware/upload');
 const { protect, requireAdmin, requireStaff } = require('../middleware/auth');
@@ -19,7 +23,7 @@ async function fileFromMulter(file, prefix) {
   const safeOriginal = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
   const blobPath = `applications/${prefix}-${Date.now()}-${safeOriginal}`;
   const blob = await put(blobPath, file.buffer, {
-    access: 'public',
+    access: BLOB_ACCESS,
     contentType: file.mimetype,
     addRandomSuffix: true,
   });
