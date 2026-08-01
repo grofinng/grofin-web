@@ -17,6 +17,11 @@ import { geoApi } from '../api/geo';
 // Vercel serverless functions reject request bodies over ~4.5 MB with a 413,
 // so keep the combined upload comfortably under that.
 const MAX_TOTAL_UPLOAD_BYTES = 4 * 1024 * 1024;
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+const MB = 1024 * 1024;
+
+type FileField = 'validId' | 'proofOfAddress' | 'offerLetter' | 'bankStatement' | 'staffId';
+const FILE_FIELDS: FileField[] = ['validId', 'proofOfAddress', 'offerLetter', 'bankStatement', 'staffId'];
 
 interface GeoLists {
   countries: string[];
@@ -332,6 +337,28 @@ export function Apply() {
     setDirty(true);
   };
 
+  // Attach a document, rejecting it immediately if it would push the combined
+  // upload past the limit (instead of surprising the user at submit time).
+  const attachFile = (key: FileField, f: File | null) => {
+    if (f) {
+      const othersSize = FILE_FIELDS.filter((k) => k !== key)
+        .map((k) => form[k])
+        .filter(Boolean)
+        .reduce((sum, file) => sum + (file as File).size, 0);
+      if (othersSize + f.size > MAX_TOTAL_UPLOAD_BYTES) {
+        update(key, null);
+        setErrors((prev) => ({
+          ...prev,
+          [key]: `Adding this file (${(f.size / MB).toFixed(1)} MB) would put your documents over the ${
+            MAX_TOTAL_UPLOAD_BYTES / MB
+          } MB combined limit — your other documents already use ${(othersSize / MB).toFixed(1)} MB. Please use a smaller file.`,
+        }));
+        return;
+      }
+    }
+    update(key, f);
+  };
+
   const togglePurpose = (purpose: Purpose) => {
     setForm((prev) => {
       const exists = prev.purposes.includes(purpose);
@@ -520,9 +547,9 @@ export function Apply() {
     const totalUpload = attachedFiles.reduce((sum, f) => sum + f.size, 0);
     if (totalUpload > MAX_TOTAL_UPLOAD_BYTES) {
       setSubmitError(
-        `Your documents add up to ${(totalUpload / (1024 * 1024)).toFixed(1)} MB, which is over the ${(
-          MAX_TOTAL_UPLOAD_BYTES / (1024 * 1024)
-        ).toFixed(0)} MB upload limit. Photos are compressed automatically, so a large PDF is usually the cause — please replace it with a smaller file.`
+        `Your documents (PDF, PNG, or JPG) add up to ${(totalUpload / MB).toFixed(1)} MB, which is over the ${
+          MAX_TOTAL_UPLOAD_BYTES / MB
+        } MB combined upload limit. Photos are compressed automatically, so a large PDF is usually the cause — please replace it with a smaller file.`
       );
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -684,13 +711,19 @@ export function Apply() {
         )}
         {step === 0 && (
           <>
+            <div className="alert alert-info">
+              <strong>Documents:</strong> we accept PDF, PNG, and JPG files only. All your documents
+              together must stay under {MAX_TOTAL_UPLOAD_BYTES / MB} MB — photos are compressed
+              automatically when you attach them, so this mainly matters for PDFs.
+            </div>
             <PersonalStep
               form={form}
               update={update}
               errors={errors}
+              attachFile={attachFile}
               geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
             />
-            <EmploymentStep form={form} update={update} errors={errors} />
+            <EmploymentStep form={form} update={update} errors={errors} attachFile={attachFile} />
           </>
         )}
         {step === 1 && (
@@ -758,7 +791,11 @@ interface StepProps {
   errors: Record<string, string>;
 }
 
-function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists }) {
+interface FileStepProps extends StepProps {
+  attachFile: (key: FileField, f: File | null) => void;
+}
+
+function PersonalStep({ form, update, errors, attachFile, geo }: FileStepProps & { geo: GeoLists }) {
   const stateListReady = geo.states.length > 0;
   const cityListReady = geo.cities.length > 0;
   return (
@@ -875,7 +912,7 @@ function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists
         label="Proof of address"
         id="proofOfAddress"
         file={form.proofOfAddress}
-        onChange={(f) => update('proofOfAddress', f)}
+        onChange={(f) => attachFile('proofOfAddress', f)}
         error={errors.proofOfAddress}
         help="Recent utility bill, bank statement, or tenancy agreement showing the address above"
         required
@@ -896,7 +933,7 @@ function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists
         label="Valid means of ID"
         id="validId"
         file={form.validId}
-        onChange={(f) => update('validId', f)}
+        onChange={(f) => attachFile('validId', f)}
         error={errors.validId}
         help="NIN slip, Driver's license, International passport, or Voter's card"
         required
@@ -905,7 +942,7 @@ function PersonalStep({ form, update, errors, geo }: StepProps & { geo: GeoLists
   );
 }
 
-function EmploymentStep({ form, update, errors }: StepProps) {
+function EmploymentStep({ form, update, errors, attachFile }: FileStepProps) {
   return (
     <div>
       <div className="section-title" style={{ marginTop: '1.5rem' }}>Income declaration</div>
@@ -952,7 +989,7 @@ function EmploymentStep({ form, update, errors }: StepProps) {
               label="Offer letter"
               id="offerLetter"
               file={form.offerLetter}
-              onChange={(f) => update('offerLetter', f)}
+              onChange={(f) => attachFile('offerLetter', f)}
               error={errors.offerLetter}
               required
             />
@@ -960,7 +997,7 @@ function EmploymentStep({ form, update, errors }: StepProps) {
               label="6 months bank statement"
               id="bankStatement"
               file={form.bankStatement}
-              onChange={(f) => update('bankStatement', f)}
+              onChange={(f) => attachFile('bankStatement', f)}
               error={errors.bankStatement}
               required
             />
@@ -970,7 +1007,7 @@ function EmploymentStep({ form, update, errors }: StepProps) {
             label="Staff ID"
             id="staffId"
             file={form.staffId}
-            onChange={(f) => update('staffId', f)}
+            onChange={(f) => attachFile('staffId', f)}
             error={errors.staffId}
             required
           />
@@ -1412,6 +1449,9 @@ function Field({
   );
 }
 
+const ACCEPTED_TYPES = ['application/pdf', 'image/png', 'image/jpeg'];
+const ACCEPTED_LABEL = 'PDF, PNG, or JPG';
+
 function FileUpload({
   label,
   id,
@@ -1429,6 +1469,8 @@ function FileUpload({
   help?: string;
   required?: boolean;
 }) {
+  const [localError, setLocalError] = useState<string | null>(null);
+  const shownError = localError || error;
   return (
     <div className="form-group">
       <label htmlFor={id}>
@@ -1438,25 +1480,41 @@ function FileUpload({
       <label className={`file-drop ${file ? 'has-file' : ''}`}>
         <span className="file-drop-label">{file ? file.name : `Click to upload ${label.toLowerCase()}`}</span>
         <span className="file-drop-meta">
-          {file ? `${(file.size / 1024).toFixed(0)} KB` : help || 'PDF, PNG, or JPG · max 5 MB'}
+          {file
+            ? `${(file.size / 1024).toFixed(0)} KB`
+            : `${help ? `${help} · ` : ''}${ACCEPTED_LABEL} · max ${MAX_FILE_BYTES / MB} MB`}
         </span>
         <input
           id={id}
           type="file"
-          accept="application/pdf,image/png,image/jpeg"
+          accept={ACCEPTED_TYPES.join(',')}
           onChange={async (e) => {
             const raw = e.target.files?.[0] || null;
-            if (!raw) return onChange(null);
-            const f = await compressImageFile(raw);
-            if (f.size > 5 * 1024 * 1024) {
+            if (!raw) {
+              setLocalError(null);
+              return onChange(null);
+            }
+            if (!ACCEPTED_TYPES.includes(raw.type)) {
+              setLocalError(
+                `"${raw.name}" is not a supported format — please upload a ${ACCEPTED_LABEL} file.`
+              );
               onChange(null);
               return;
             }
+            const f = await compressImageFile(raw);
+            if (f.size > MAX_FILE_BYTES) {
+              setLocalError(
+                `This file is ${(f.size / MB).toFixed(1)} MB — over the ${MAX_FILE_BYTES / MB} MB limit. Please upload a smaller ${ACCEPTED_LABEL} file.`
+              );
+              onChange(null);
+              return;
+            }
+            setLocalError(null);
             onChange(f);
           }}
         />
       </label>
-      {error && <span className="field-error">{error}</span>}
+      {shownError && <span className="field-error">{shownError}</span>}
     </div>
   );
 }
