@@ -7,7 +7,13 @@ import { NIGERIA_STATES, lgasForState } from '../data/nigeria';
 
 const BASE = 'https://countriesnow.space/api/v0.1';
 
+export interface CountryOption {
+  name: string;
+  iso2: string;
+}
+
 const cache = new Map<string, string[]>();
+let countriesCache: CountryOption[] | null = null;
 
 interface CnEnvelope<T> {
   error: boolean;
@@ -28,16 +34,16 @@ const sorted = (list: string[]) =>
   Array.from(new Set(list)).sort((a, b) => a.localeCompare(b));
 
 export const geoApi = {
-  async countries(): Promise<string[]> {
-    const key = 'countries';
-    if (cache.has(key)) return cache.get(key)!;
+  async countries(): Promise<CountryOption[]> {
+    if (countriesCache) return countriesCache;
     try {
-      const data = await get<{ name: string }[]>('/countries/positions');
-      const names = sorted(data.map((c) => c.name));
-      cache.set(key, names);
-      return names;
+      const data = await get<{ name: string; iso2: string }[]>('/countries/positions');
+      countriesCache = data
+        .map((c) => ({ name: c.name, iso2: c.iso2 }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return countriesCache;
     } catch {
-      return ['Nigeria'];
+      return [{ name: 'Nigeria', iso2: 'NG' }];
     }
   },
 

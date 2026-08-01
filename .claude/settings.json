@@ -56,7 +56,11 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0\" node debug-page.js)",
       "Bash(curl -s -o /dev/null -w 'me:%{http_code}\\\\n' http://localhost:8080/api/auth/me -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjZhNjA4NmMyNmY5YTcwZjE4NTVmNDdhMiIsImlhdCI6MTc4NDcxMDg1MSwiZXhwIjoxNzg1MzE1NjUxfQ.VekJlxNkXxTWm76dFeOwT9tLi-SKz3C5aWnVg6UDld0')",
       "Bash(curl -s http://localhost:8080/api/auth/login -X POST -H 'Content-Type: application/json' -d '{\"email\":\"claude.test.apply@example.com\",\"password\":\"test123\"}')",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(grep -n \"form-row\\\\b\\\\|form-row-3\\\\|^select\\\\|input\\\\[\\\\|select {\\\\|select,\" /Users/praise-jah/peejay/grofin/src/styles/theme.css)",
+      "Bash(grep -n -B2 -A8 \"input\\\\b.*,.*select\\\\|select.*{\" /Users/praise-jah/peejay/grofin/src/styles/theme.css)",
+      "Bash(curl -s -o /dev/null -w \"client:%{http_code} api:\" http://localhost:3001)",
+      "Bash(xargs -r kill)"
     ]
   }
 }

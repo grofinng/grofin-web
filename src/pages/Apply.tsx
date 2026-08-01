@@ -12,7 +12,8 @@ import { totalRepayable } from '../utils/loan';
 import { compressImageFile } from '../utils/compressImage';
 import { formatNaira } from '../utils/format';
 import { emailNotifications } from '../utils/email';
-import { geoApi } from '../api/geo';
+import { CountryOption, geoApi } from '../api/geo';
+import { AsYouType, CountryCode, isValidPhoneNumber } from 'libphonenumber-js';
 
 // Vercel serverless functions reject request bodies over ~4.5 MB with a 413,
 // so keep the combined upload comfortably under that.
@@ -24,7 +25,7 @@ type FileField = 'validId' | 'proofOfAddress' | 'offerLetter' | 'bankStatement' 
 const FILE_FIELDS: FileField[] = ['validId', 'proofOfAddress', 'offerLetter', 'bankStatement', 'staffId'];
 
 interface GeoLists {
-  countries: string[];
+  countries: CountryOption[];
   states: string[];
   cities: string[];
   statesLoading: boolean;
@@ -202,7 +203,7 @@ export function Apply() {
 
   // Country → state → city/LGA lists come from the CountriesNow API (cached in
   // src/api/geo.ts, with a bundled Nigeria fallback when the API is down).
-  const [countries, setCountries] = useState<string[]>([]);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
   const [statesList, setStatesList] = useState<string[]>([]);
   const [citiesList, setCitiesList] = useState<string[]>([]);
   const [statesLoading, setStatesLoading] = useState(false);
@@ -213,11 +214,20 @@ export function Apply() {
     geoApi
       .countries()
       .then((list) => !cancelled && setCountries(list))
-      .catch(() => !cancelled && setCountries(['Nigeria']));
+      .catch(() => !cancelled && setCountries([{ name: 'Nigeria', iso2: 'NG' }]));
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Phone validation & as-you-type formatting follow the selected country.
+  const countryIso = (countries.find((c) => c.name === form.country)?.iso2 || 'NG') as CountryCode;
+  const formatPhone = (next: string, prev: string) => {
+    // Re-formatting while deleting traps the cursor on punctuation — skip it.
+    if (next.length < prev.length) return next;
+    return new AsYouType(countryIso).input(next);
+  };
+  const validPhone = (value: string) => isValidPhoneNumber(value, countryIso);
 
   useEffect(() => {
     if (!form.country) {
@@ -293,16 +303,9 @@ export function Apply() {
       .catch((err: unknown) => {
         if (cancelled) return;
         const status = (err as { response?: { status?: number } })?.response?.status;
-        // 503 = verification unavailable server-side → let them type it in.
-        if (status === 503) {
-          setAccountStatus('manual');
-        } else {
-          setAccountStatus('failed');
-          setErrors((prev) => ({
-            ...prev,
-            accountNumber: extractApiError(err, 'Could not verify this account — check the number and bank'),
-          }));
-        }
+        // Verification is best-effort: whether it's unavailable (503) or the
+        // lookup failed (422), the applicant can type the account name manually.
+        setAccountStatus(status === 503 ? 'manual' : 'failed');
       });
     return () => {
       cancelled = true;
@@ -446,8 +449,10 @@ export function Apply() {
       if (!form.lga.trim()) e.lga = 'Select your city / LGA';
       else if (citiesList.length > 0 && !citiesList.includes(form.lga))
         e.lga = 'Select a city / LGA in the chosen state';
-      if (!/^\+?\d{7,15}$/.test(form.mobileNumber.replace(/\s/g, ''))) e.mobileNumber = 'Enter a valid mobile number';
-      if (form.altNumber && !/^\+?\d{7,15}$/.test(form.altNumber.replace(/\s/g, ''))) e.altNumber = 'Enter a valid alternate number';
+      if (!form.mobileNumber.trim() || !validPhone(form.mobileNumber))
+        e.mobileNumber = `Enter a valid ${form.country} mobile number`;
+      if (form.altNumber && !validPhone(form.altNumber))
+        e.altNumber = `Enter a valid ${form.country} phone number`;
       if (!/^\d{11}$/.test(form.bvn)) e.bvn = 'BVN must be 11 digits';
       if (!/^\d{11}$/.test(form.nin)) e.nin = 'NIN must be 11 digits';
       if (!form.validId && !isEditMode) e.validId = 'Upload a valid means of ID';
@@ -468,8 +473,8 @@ export function Apply() {
         if (!form.referenceRelationship.trim())
           e.referenceRelationship = 'State your relationship with the reference';
         if (!form.referencePhone.trim()) e.referencePhone = "Your reference's phone number is required";
-        else if (!/^\+?\d{7,15}$/.test(form.referencePhone.replace(/\s/g, '')))
-          e.referencePhone = 'Enter a valid phone number';
+        else if (!validPhone(form.referencePhone))
+          e.referencePhone = `Enter a valid ${form.country} phone number`;
         if (!form.referenceAddress.trim()) e.referenceAddress = "Your reference's address is required";
       }
     }
@@ -498,8 +503,6 @@ export function Apply() {
         if (!/^\d{10}$/.test(form.accountNumber)) e.accountNumber = 'Account number must be 10 digits';
         if (!form.bankName) e.bankName = 'Select your bank';
         if (!form.accountName.trim()) e.accountName = 'Account name is required';
-        if (accountStatus === 'failed')
-          e.accountNumber = 'We could not verify this account — check the number and bank';
       }
     }
 
@@ -557,7 +560,7 @@ export function Apply() {
       setSubmitError(
         `Your documents (PDF, PNG, or JPG) add up to ${(totalUpload / MB).toFixed(1)} MB, which is over the ${
           MAX_TOTAL_UPLOAD_BYTES / MB
-        } MB combined upload limit. Photos are compressed automatically, so a large PDF is usually the cause — please replace it with a smaller file.`
+        } MB combined upload limit. Please replace it with a smaller file.`
       );
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -721,17 +724,23 @@ export function Apply() {
           <>
             <div className="alert alert-info">
               <strong>Documents:</strong> we accept PDF, PNG, and JPG files only. All your documents
-              together must stay under {MAX_TOTAL_UPLOAD_BYTES / MB} MB — photos are compressed
-              automatically when you attach them, so this mainly matters for PDFs.
+              together must stay under {MAX_TOTAL_UPLOAD_BYTES / MB} MB.
             </div>
             <PersonalStep
               form={form}
               update={update}
               errors={errors}
               attachFile={attachFile}
+              formatPhone={formatPhone}
               geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
             />
-            <EmploymentStep form={form} update={update} errors={errors} attachFile={attachFile} />
+            <EmploymentStep
+              form={form}
+              update={update}
+              errors={errors}
+              attachFile={attachFile}
+              formatPhone={formatPhone}
+            />
           </>
         )}
         {step === 1 && (
@@ -801,9 +810,10 @@ interface StepProps {
 
 interface FileStepProps extends StepProps {
   attachFile: (key: FileField, f: File | null) => void;
+  formatPhone: (next: string, prev: string) => string;
 }
 
-function PersonalStep({ form, update, errors, attachFile, geo }: FileStepProps & { geo: GeoLists }) {
+function PersonalStep({ form, update, errors, attachFile, formatPhone, geo }: FileStepProps & { geo: GeoLists }) {
   const stateListReady = geo.states.length > 0;
   const cityListReady = geo.cities.length > 0;
   return (
@@ -832,39 +842,34 @@ function PersonalStep({ form, update, errors, attachFile, geo }: FileStepProps &
 
       <div className="form-row-3">
         <Field label="Country" id="country" error={errors.country} required>
-          <select
+          <SearchSelect
             id="country"
             value={form.country}
-            onChange={(e) => {
-              update('country', e.target.value);
+            options={geo.countries.map((c) => c.name)}
+            placeholder="Search country"
+            loading={geo.countries.length === 0}
+            invalid={!!errors.country}
+            onSelect={(v) => {
+              update('country', v);
               update('state', '');
               update('lga', '');
             }}
-            aria-invalid={!!errors.country}
-          >
-            {geo.countries.length === 0 && <option value={form.country}>{form.country}</option>}
-            {geo.countries.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          />
         </Field>
         <Field label="State" id="state" error={errors.state} required>
           {stateListReady || geo.statesLoading ? (
-            <select
+            <SearchSelect
               id="state"
               value={form.state}
-              onChange={(e) => {
-                update('state', e.target.value);
+              options={geo.states}
+              placeholder="Search state"
+              loading={geo.statesLoading}
+              invalid={!!errors.state}
+              onSelect={(v) => {
+                update('state', v);
                 update('lga', '');
               }}
-              disabled={geo.statesLoading}
-              aria-invalid={!!errors.state}
-            >
-              <option value="">{geo.statesLoading ? 'Loading states…' : 'Select a state'}</option>
-              {geo.states.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
+            />
           ) : (
             <input
               id="state"
@@ -877,24 +882,16 @@ function PersonalStep({ form, update, errors, attachFile, geo }: FileStepProps &
         </Field>
         <Field label="City / LGA" id="lga" error={errors.lga} required>
           {!form.state || cityListReady || geo.citiesLoading ? (
-            <select
+            <SearchSelect
               id="lga"
               value={form.lga}
-              onChange={(e) => update('lga', e.target.value)}
-              disabled={!form.state || geo.citiesLoading}
-              aria-invalid={!!errors.lga}
-            >
-              <option value="">
-                {!form.state
-                  ? 'Select a state first'
-                  : geo.citiesLoading
-                  ? 'Loading…'
-                  : 'Select a city / LGA'}
-              </option>
-              {geo.cities.map((l) => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
+              options={geo.cities}
+              placeholder={form.state ? 'Search city / LGA' : 'Select a state first'}
+              disabled={!form.state}
+              loading={!!form.state && geo.citiesLoading}
+              invalid={!!errors.lga}
+              onSelect={(v) => update('lga', v)}
+            />
           ) : (
             <input
               id="lga"
@@ -909,10 +906,10 @@ function PersonalStep({ form, update, errors, attachFile, geo }: FileStepProps &
 
       <div className="form-row">
         <Field label="Mobile number" id="mobileNumber" error={errors.mobileNumber} required>
-          <input id="mobileNumber" inputMode="tel" value={form.mobileNumber} onChange={(e) => update('mobileNumber', e.target.value)} aria-invalid={!!errors.mobileNumber} />
+          <input id="mobileNumber" inputMode="tel" value={form.mobileNumber} onChange={(e) => update('mobileNumber', formatPhone(e.target.value, form.mobileNumber))} aria-invalid={!!errors.mobileNumber} />
         </Field>
         <Field label="Alternate number" id="altNumber" error={errors.altNumber} help="Optional">
-          <input id="altNumber" inputMode="tel" value={form.altNumber} onChange={(e) => update('altNumber', e.target.value)} aria-invalid={!!errors.altNumber} />
+          <input id="altNumber" inputMode="tel" value={form.altNumber} onChange={(e) => update('altNumber', formatPhone(e.target.value, form.altNumber))} aria-invalid={!!errors.altNumber} />
         </Field>
       </div>
 
@@ -950,7 +947,7 @@ function PersonalStep({ form, update, errors, attachFile, geo }: FileStepProps &
   );
 }
 
-function EmploymentStep({ form, update, errors, attachFile }: FileStepProps) {
+function EmploymentStep({ form, update, errors, attachFile, formatPhone }: FileStepProps) {
   return (
     <div>
       <div className="section-title" style={{ marginTop: '1.5rem' }}>Income declaration</div>
@@ -1038,7 +1035,7 @@ function EmploymentStep({ form, update, errors, attachFile }: FileStepProps) {
               <input id="referenceRelationship" value={form.referenceRelationship} onChange={(e) => update('referenceRelationship', e.target.value)} aria-invalid={!!errors.referenceRelationship} />
             </Field>
             <Field label="Reference phone number" id="referencePhone" error={errors.referencePhone} required>
-              <input id="referencePhone" inputMode="tel" value={form.referencePhone} onChange={(e) => update('referencePhone', e.target.value)} aria-invalid={!!errors.referencePhone} />
+              <input id="referencePhone" inputMode="tel" value={form.referencePhone} onChange={(e) => update('referencePhone', formatPhone(e.target.value, form.referencePhone))} aria-invalid={!!errors.referencePhone} />
             </Field>
           </div>
 
@@ -1260,26 +1257,20 @@ function LoanStep({
               />
             </Field>
             <Field label="Bank" id="bankCode" error={errors.bankName} required>
-              <select
+              <SearchSelect
                 id="bankCode"
-                value={form.bankCode}
-                onChange={(e) => {
-                  const bank = banks.find((b) => b.code === e.target.value);
-                  update('bankCode', e.target.value);
-                  update('bankName', bank?.name || '');
+                value={form.bankName}
+                options={banks.map((b) => b.name)}
+                placeholder="Search your bank"
+                loading={banksLoading}
+                invalid={!!errors.bankName}
+                onSelect={(name) => {
+                  const bank = banks.find((b) => b.name === name);
+                  update('bankCode', bank?.code || '');
+                  update('bankName', name);
                   if (form.accountName) update('accountName', '');
                 }}
-                disabled={banksLoading}
-                aria-invalid={!!errors.bankName}
-              >
-                <option value="">{banksLoading ? 'Loading banks…' : 'Select your bank'}</option>
-                {banks.map((b) => (
-                  <option key={b.code} value={b.code}>{b.name}</option>
-                ))}
-                {banks.length === 0 && !banksLoading && form.bankName && (
-                  <option value={form.bankCode}>{form.bankName}</option>
-                )}
-              </select>
+              />
             </Field>
           </div>
 
@@ -1296,7 +1287,7 @@ function LoanStep({
                 : accountStatus === 'manual'
                 ? 'Automatic verification is unavailable — type the account name exactly as your bank has it'
                 : accountStatus === 'failed'
-                ? undefined
+                ? "We couldn't verify this account — double-check the number and bank, or type the account name exactly as your bank has it"
                 : 'Auto-filled once your account number and bank are verified'
             }
           >
@@ -1426,6 +1417,121 @@ function ReviewStep({
         </label>
         {errors.termsAccepted && <span className="field-error">{errors.termsAccepted}</span>}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Combobox: type to filter long option lists (countries, states, banks…)
+ * instead of scrolling a native select. Committed value comes only from
+ * picking an option — free text resets on blur.
+ */
+function SearchSelect({
+  id,
+  value,
+  options,
+  placeholder,
+  disabled,
+  loading,
+  invalid,
+  onSelect,
+}: {
+  id: string;
+  value: string;
+  options: string[];
+  placeholder: string;
+  disabled?: boolean;
+  loading?: boolean;
+  invalid?: boolean;
+  onSelect: (v: string) => void;
+}) {
+  const [query, setQuery] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+
+  const q = (query ?? '').trim().toLowerCase();
+  const filtered = q ? options.filter((o) => o.toLowerCase().includes(q)) : options;
+  const visible = filtered.slice(0, 60);
+
+  const commit = (v: string) => {
+    onSelect(v);
+    setQuery(null);
+    setOpen(false);
+  };
+
+  return (
+    <div className="search-select">
+      <input
+        id={id}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={`${id}-listbox`}
+        autoComplete="off"
+        placeholder={loading ? 'Loading…' : placeholder}
+        disabled={disabled || loading}
+        value={query ?? value}
+        aria-invalid={invalid || undefined}
+        onFocus={() => setOpen(true)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+          setHighlight(0);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setOpen(true);
+            setHighlight((h) => Math.min(h + 1, visible.length - 1));
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setHighlight((h) => Math.max(h - 1, 0));
+          } else if (e.key === 'Enter') {
+            if (open && visible[highlight]) {
+              e.preventDefault();
+              commit(visible[highlight]);
+            }
+          } else if (e.key === 'Escape') {
+            setOpen(false);
+            setQuery(null);
+          }
+        }}
+        onBlur={() => {
+          // Let option mousedown commit before closing
+          window.setTimeout(() => {
+            setOpen(false);
+            setQuery(null);
+          }, 150);
+        }}
+      />
+      {open && !disabled && !loading && (
+        <div className="search-select-list" role="listbox" id={`${id}-listbox`}>
+          {visible.length === 0 ? (
+            <div className="search-select-empty">No matches</div>
+          ) : (
+            visible.map((o, i) => (
+              <button
+                type="button"
+                key={o}
+                role="option"
+                aria-selected={o === value}
+                className={`search-select-option${i === highlight ? ' active' : ''}${o === value ? ' selected' : ''}`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  commit(o);
+                }}
+                onMouseEnter={() => setHighlight(i)}
+              >
+                {o}
+              </button>
+            ))
+          )}
+          {filtered.length > visible.length && (
+            <div className="search-select-empty">
+              {filtered.length - visible.length} more — keep typing to narrow down
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

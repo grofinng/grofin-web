@@ -309,11 +309,13 @@ p { color: var(--gf-muted); line-height: 1.55; margin: 0 0 1rem; }
 
 .btn-block { width: 100%; }
 
-.form-group { margin-bottom: 1.1rem; display: flex; flex-direction: column; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.form-group { margin-bottom: 1.1rem; display: flex; flex-direction: column; min-width: 0; }
+/* minmax(0, 1fr) — a plain 1fr column refuses to shrink below the widest
+   <option> of a select (bank/state lists), blowing the row out of the card. */
+.form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; }
+.form-row-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
 @media (max-width: 720px) {
-  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+  .form-row, .form-row-3 { grid-template-columns: minmax(0, 1fr); }
 }
 
 label {
@@ -332,7 +334,15 @@ input, select, textarea {
   padding: 0.7rem 0.85rem;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-width: 0;
 }
+/* Fill the column, but leave checkboxes/radios at their natural size */
+input:not([type='checkbox']):not([type='radio']):not([type='file']),
+select,
+textarea {
+  width: 100%;
+}
+select { text-overflow: ellipsis; }
 input:focus, select:focus, textarea:focus {
   border-color: var(--gf-green-600);
   box-shadow: 0 0 0 3px rgba(54, 169, 103, 0.15);
@@ -1348,4 +1358,40 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
 .repay-overdue {
   color: var(--gf-danger);
   font-weight: 600;
+}
+
+/* Searchable combobox (Apply form long lists) */
+.search-select { position: relative; min-width: 0; }
+.search-select-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #fff;
+  border: 1px solid var(--gf-border);
+  border-radius: var(--gf-radius-sm);
+  box-shadow: var(--gf-shadow-lg);
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+.search-select-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  font: inherit;
+  color: var(--gf-ink);
+  cursor: pointer;
+}
+.search-select-option.active { background: var(--gf-green-100); }
+.search-select-option.selected { font-weight: 700; color: var(--gf-green-700); }
+.search-select-empty {
+  padding: 0.5rem 0.6rem;
+  color: var(--gf-muted);
+  font-size: 0.85rem;
 }
