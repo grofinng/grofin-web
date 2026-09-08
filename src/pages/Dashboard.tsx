@@ -32,8 +32,12 @@ export function Dashboard() {
     <div className="container page">
       <div className="page-header">
         <div className="page-title">
-          <h1>Hi {user?.firstName}, welcome to Esena Africa</h1>
-          <p>Apply for support with everyday essentials and track the status of your applications.</p>
+          <h1>{!loading && apps.length > 0 ? `Welcome back, ${user?.firstName}` : `Hi ${user?.firstName}, welcome to Esena Africa`}</h1>
+          <p>
+            {!loading && apps.length > 0
+              ? 'Your details are saved — a new application only takes a minute. Track your existing ones below.'
+              : 'Apply for support with everyday essentials and track the status of your applications.'}
+          </p>
         </div>
         <Link to="/apply" className="btn">
           New application

@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
@@ -6,11 +6,11 @@ import { applicationsApi } from '../api/applications';
 import { vendorsApi } from '../api/vendors';
 import { usersApi } from '../api/users';
 import { extractApiError } from '../api/client';
-import { Bank, EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor, VendorPurpose } from '../types';
+import { Application, Bank, EmploymentStatus, PURPOSE_TO_CATEGORY, PURPOSES, Purpose, Vendor, VendorPurpose } from '../types';
 import { banksApi } from '../api/banks';
 import { totalRepayable } from '../utils/loan';
 import { compressImageFile } from '../utils/compressImage';
-import { formatNaira } from '../utils/format';
+import { formatDate, formatNaira } from '../utils/format';
 import { emailNotifications } from '../utils/email';
 import { CountryOption, geoApi } from '../api/geo';
 import { AsYouType, CountryCode, isValidPhoneNumber } from 'libphonenumber-js';
@@ -72,7 +72,93 @@ interface ApplyFormState {
   termsAccepted: boolean;
 }
 
-const STEPS = ['Personal details', 'Loan request', 'Review'] as const;
+type StepKey = 'personal' | 'purpose' | 'records' | 'loan' | 'account' | 'review';
+
+const STEP_LABELS: Record<StepKey, string> = {
+  personal: 'Personal details',
+  purpose: 'What you need',
+  records: 'Your records',
+  loan: 'Loan details',
+  account: 'Receiving account',
+  review: 'Review',
+};
+
+// First-time applicants fill in everything; returning customers confirm what
+// we already hold and only add what changed.
+const STANDARD_STEPS: StepKey[] = ['personal', 'loan', 'review'];
+
+const EMPTY_BY_PURPOSE: Record<Purpose, string> = { Groceries: '', Medications: '', Other: '' };
+
+const FILE_LABELS: Record<FileField, string> = {
+  validId: 'Valid ID',
+  proofOfAddress: 'Proof of address',
+  offerLetter: 'Offer letter',
+  bankStatement: 'Bank statement',
+  staffId: 'Staff ID',
+};
+
+/** Maps a saved application onto the form. Files can't be restored — they stay on the server. */
+function formFromApplication(app: Application, base: ApplyFormState): ApplyFormState {
+  const breakdown: Record<Purpose, string> = { ...EMPTY_BY_PURPOSE };
+  app.purposeBreakdown.forEach((b) => {
+    breakdown[b.purpose] = String(b.amount);
+  });
+  const vendorIds: Record<Purpose, string> = { ...EMPTY_BY_PURPOSE };
+  app.vendorSelections.forEach((sel) => {
+    vendorIds[sel.purpose] =
+      typeof sel.vendor === 'object' ? (sel.vendor as Vendor)._id : (sel.vendor as string);
+  });
+  return {
+    ...base,
+    surname: app.surname,
+    firstName: app.firstName,
+    middleName: app.middleName || '',
+    email: app.email,
+    houseAddress: app.houseAddress,
+    country: app.country || 'Nigeria',
+    lga: app.lga,
+    state: app.state,
+    mobileNumber: app.mobileNumber,
+    altNumber: app.altNumber || '',
+    bvn: app.bvn,
+    nin: app.nin,
+    validId: null,
+    proofOfAddress: null,
+    loanAmount: String(app.loanAmount),
+    purposes: app.purposes,
+    breakdown,
+    vendorIds,
+    employmentStatus: app.employmentStatus || 'employed',
+    employerName: app.employerName || '',
+    officeAddress: app.officeAddress || '',
+    referenceName: app.referenceName || '',
+    referenceRelationship: app.referenceRelationship || '',
+    referencePhone: app.referencePhone || '',
+    referenceAddress: app.referenceAddress || '',
+    accountNumber: app.accountNumber || '',
+    bankCode: '',
+    bankName: app.bankName || '',
+    accountName: app.accountName || '',
+    offerLetter: null,
+    bankStatement: null,
+    staffId: null,
+    termsAccepted: !!app.termsAccepted,
+  };
+}
+
+/** Returning customers start from their saved records with a fresh loan request. */
+function returningForm(app: Application, base: ApplyFormState): ApplyFormState {
+  return {
+    ...formFromApplication(app, base),
+    purposes: [],
+    breakdown: { ...EMPTY_BY_PURPOSE },
+    vendorIds: { ...EMPTY_BY_PURPOSE },
+    termsAccepted: false,
+  };
+}
+
+const hasSavedAccount = (app: Application | null) =>
+  !!app && /^\d{10}$/.test(app.accountNumber || '') && !!app.bankName && !!app.accountName;
 
 type AccountStatus = 'idle' | 'verifying' | 'verified' | 'failed' | 'manual';
 
@@ -90,6 +176,14 @@ export function Apply() {
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(isEditMode);
   const [editLoadError, setEditLoadError] = useState<string | null>(null);
+
+  // The application we pre-fill from: the one being edited, or a returning
+  // customer's most recent one.
+  const [sourceApp, setSourceApp] = useState<Application | null>(null);
+  const [returning, setReturning] = useState(false);
+  const [previousLoading, setPreviousLoading] = useState(!isEditMode && !!user);
+  const [recordsView, setRecordsView] = useState<'summary' | 'edit'>('summary');
+  const [accountView, setAccountView] = useState<'keep' | 'change'>('keep');
 
   useEffect(() => {
     let cancelled = false;
@@ -117,50 +211,8 @@ export function Apply() {
           setEditLoadError('This application is not open for editing.');
           return;
         }
-        const breakdown: Record<Purpose, string> = { Groceries: '', Medications: '', Other: '' };
-        app.purposeBreakdown.forEach((b) => {
-          breakdown[b.purpose] = String(b.amount);
-        });
-        const vendorIds: Record<Purpose, string> = { Groceries: '', Medications: '', Other: '' };
-        app.vendorSelections.forEach((s) => {
-          vendorIds[s.purpose] =
-            typeof s.vendor === 'object' ? (s.vendor as Vendor)._id : (s.vendor as string);
-        });
-        setForm({
-          surname: app.surname,
-          firstName: app.firstName,
-          middleName: app.middleName || '',
-          email: app.email,
-          houseAddress: app.houseAddress,
-          country: app.country || 'Nigeria',
-          lga: app.lga,
-          state: app.state,
-          mobileNumber: app.mobileNumber,
-          altNumber: app.altNumber || '',
-          bvn: app.bvn,
-          nin: app.nin,
-          validId: null,
-          proofOfAddress: null,
-          loanAmount: String(app.loanAmount),
-          purposes: app.purposes,
-          breakdown,
-          vendorIds,
-          employmentStatus: app.employmentStatus || 'employed',
-          employerName: app.employerName || '',
-          officeAddress: app.officeAddress || '',
-          referenceName: app.referenceName || '',
-          referenceRelationship: app.referenceRelationship || '',
-          referencePhone: app.referencePhone || '',
-          referenceAddress: app.referenceAddress || '',
-          accountNumber: app.accountNumber || '',
-          bankCode: '',
-          bankName: app.bankName || '',
-          accountName: app.accountName || '',
-          offerLetter: null,
-          bankStatement: null,
-          staffId: null,
-          termsAccepted: !!app.termsAccepted,
-        });
+        setSourceApp(app);
+        setForm((prev) => formFromApplication(app, prev));
       })
       .catch((err) => !cancelled && setEditLoadError(extractApiError(err, 'Could not load application')))
       .finally(() => !cancelled && setEditLoading(false));
@@ -327,6 +379,7 @@ export function Apply() {
   // serialized, so they are the one thing the applicant must re-attach.
   const draftKey = user && !isEditMode ? `esena_apply_draft_${user.id}` : null;
   const [draftRestored, setDraftRestored] = useState(false);
+  const draftRestoredRef = useRef(false);
 
   useEffect(() => {
     if (!draftKey) return;
@@ -349,6 +402,7 @@ export function Apply() {
         termsAccepted: false,
       }));
       setDraftRestored(true);
+      draftRestoredRef.current = true;
       setDirty(true);
     } catch {
       /* corrupted draft — start clean */
@@ -374,7 +428,7 @@ export function Apply() {
 
   const discardDraft = () => {
     if (draftKey) localStorage.removeItem(draftKey);
-    setForm(freshForm());
+    setForm(returning && sourceApp ? returningForm(sourceApp, freshForm()) : freshForm());
     setErrors({});
     setStep(0);
     setDraftRestored(false);
@@ -405,6 +459,72 @@ export function Apply() {
       document.removeEventListener('click', onLinkClick, true);
     };
   }, [dirty]);
+
+  // Returning customer: pull their most recent application so they only
+  // confirm what we hold instead of typing it all again.
+  useEffect(() => {
+    if (isEditMode || !user) return;
+    let cancelled = false;
+    setPreviousLoading(true);
+    applicationsApi
+      .list()
+      .then((list) => {
+        if (cancelled || list.length === 0) return;
+        const latest = list[0];
+        setSourceApp(latest);
+        setReturning(true);
+        setAccountView(hasSavedAccount(latest) ? 'keep' : 'change');
+        if (!draftRestoredRef.current) {
+          setForm((prev) => returningForm(latest, prev));
+        }
+      })
+      .catch(() => {
+        /* fall back to the full form */
+      })
+      .finally(() => !cancelled && setPreviousLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [isEditMode, user]);
+
+  const steps = useMemo<StepKey[]>(() => {
+    if (isEditMode || !returning) return STANDARD_STEPS;
+    return ['purpose', 'records', 'loan', ...(wantsOther ? (['account'] as StepKey[]) : []), 'review'];
+  }, [isEditMode, returning, wantsOther]);
+  const stepKey: StepKey = steps[Math.min(step, steps.length - 1)];
+
+  // Which documents on file can be reused, and which must be refreshed because
+  // what they verify has changed. Mirrors the server-side rule.
+  const norm = (v?: string) => (v || '').trim().toLowerCase();
+  const addressChanged =
+    returning &&
+    !!sourceApp &&
+    (norm(form.houseAddress) !== norm(sourceApp.houseAddress) ||
+      norm(form.lga) !== norm(sourceApp.lga) ||
+      norm(form.state) !== norm(sourceApp.state) ||
+      norm(form.country) !== norm(sourceApp.country || 'Nigeria'));
+  const employerChanged =
+    returning &&
+    !!sourceApp &&
+    form.employmentStatus === 'employed' &&
+    (sourceApp.employmentStatus !== 'employed' || norm(form.employerName) !== norm(sourceApp.employerName));
+  const existingFiles = useMemo<Partial<Record<FileField, string>>>(() => {
+    if (!sourceApp) return {};
+    const out: Partial<Record<FileField, string>> = {};
+    FILE_FIELDS.forEach((k) => {
+      const f = sourceApp[k];
+      if (f && f.path) out[k] = f.originalName || FILE_LABELS[k];
+    });
+    return out;
+  }, [sourceApp]);
+  const fileRequired = (k: FileField): boolean => {
+    if (isEditMode) return false;
+    if (!returning || !sourceApp) return true;
+    if (!existingFiles[k]) return true;
+    if (k === 'proofOfAddress') return addressChanged;
+    if (k === 'validId') return false;
+    return employerChanged;
+  };
 
   const update = <K extends keyof ApplyFormState>(key: K, value: ApplyFormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -498,92 +618,149 @@ export function Apply() {
     Math.round(breakdownTotal) === Math.round(loanAmountNum) &&
     loanAmountNum > 0;
 
-  const validateStep = (s: number): Record<string, string> => {
+  const validatePersonal = (e: Record<string, string>) => {
+    if (!form.surname.trim()) e.surname = 'Surname is required';
+    if (!form.firstName.trim()) e.firstName = 'First name is required';
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Enter a valid email';
+    if (!form.houseAddress.trim()) e.houseAddress = 'House address is required';
+    if (!form.country.trim()) e.country = 'Select your country';
+    if (!form.state.trim()) e.state = 'Select your state';
+    else if (statesList.length > 0 && !statesList.includes(form.state))
+      e.state = 'Select a state from the list';
+    if (!form.lga.trim()) e.lga = 'Select your city / LGA';
+    else if (citiesList.length > 0 && !citiesList.includes(form.lga))
+      e.lga = 'Select a city / LGA in the chosen state';
+    if (!form.mobileNumber.trim() || !validPhone(form.mobileNumber))
+      e.mobileNumber = `Enter a valid ${form.country} mobile number`;
+    if (form.altNumber && !validPhone(form.altNumber))
+      e.altNumber = `Enter a valid ${form.country} phone number`;
+    if (!/^\d{11}$/.test(form.bvn)) e.bvn = 'BVN must be 11 digits';
+    if (!/^\d{11}$/.test(form.nin)) e.nin = 'NIN must be 11 digits';
+    if (!form.validId && fileRequired('validId')) e.validId = 'Upload a valid means of ID';
+    if (!form.proofOfAddress && fileRequired('proofOfAddress'))
+      e.proofOfAddress = addressChanged
+        ? 'Your address changed — upload a new proof of address for it'
+        : 'Upload a proof of address so we can verify the address above';
+    if (!form.employmentStatus) {
+      e.employmentStatus = 'Select your employment status';
+    } else if (form.employmentStatus === 'employed') {
+      if (!form.employerName.trim()) e.employerName = 'Employer name is required';
+      if (!form.officeAddress.trim()) e.officeAddress = 'Office address is required';
+      const refresh = employerChanged ? 'Your employer changed — upload ' : 'Upload ';
+      if (!form.offerLetter && fileRequired('offerLetter')) e.offerLetter = `${refresh}your offer letter`;
+      if (!form.bankStatement && fileRequired('bankStatement'))
+        e.bankStatement = `${refresh}your 6-month bank statement`;
+      if (!form.staffId && fileRequired('staffId')) e.staffId = `${refresh}your staff ID`;
+    } else {
+      if (!form.referenceName.trim()) e.referenceName = "Your reference's full name is required";
+      if (!form.referenceRelationship.trim())
+        e.referenceRelationship = 'State your relationship with the reference';
+      if (!form.referencePhone.trim()) e.referencePhone = "Your reference's phone number is required";
+      else if (!validPhone(form.referencePhone))
+        e.referencePhone = `Enter a valid ${form.country} phone number`;
+      if (!form.referenceAddress.trim()) e.referenceAddress = "Your reference's address is required";
+    }
+  };
+
+  const validateAccount = (e: Record<string, string>) => {
+    if (!form.purposes.includes('Other')) return;
+    if (!/^\d{10}$/.test(form.accountNumber)) e.accountNumber = 'Account number must be 10 digits';
+    if (!form.bankName) e.bankName = 'Select your bank';
+    if (!form.accountName.trim()) e.accountName = 'Account name is required';
+  };
+
+  const validateLoan = (e: Record<string, string>, includeAccount: boolean) => {
+    if (!loanAmountNum || loanAmountNum <= 0) e.loanAmount = 'Enter a loan amount';
+    if (form.purposes.length === 0) e.purposes = 'Select at least one purpose';
+    if (form.purposes.length > 0) {
+      for (const p of form.purposes) {
+        const v = Number(form.breakdown[p] || 0);
+        if (!v || v <= 0) e.breakdown = `Enter an amount for ${p}`;
+      }
+      if (!e.breakdown && Math.round(breakdownTotal) !== Math.round(loanAmountNum)) {
+        e.breakdown = `Breakdown total (${formatNaira(breakdownTotal)}) must equal loan amount (${formatNaira(
+          loanAmountNum
+        )})`;
+      }
+      for (const p of form.purposes) {
+        if (p !== 'Other' && !form.vendorIds[p]) {
+          e.vendors = `Select a vendor for ${p}`;
+          break;
+        }
+      }
+    }
+    if (includeAccount) validateAccount(e);
+  };
+
+  const validateStep = (key: StepKey): Record<string, string> => {
     const e: Record<string, string> = {};
-
-    if (s === 0) {
-      if (!form.surname.trim()) e.surname = 'Surname is required';
-      if (!form.firstName.trim()) e.firstName = 'First name is required';
-      if (!/^\S+@\S+\.\S+$/.test(form.email)) e.email = 'Enter a valid email';
-      if (!form.houseAddress.trim()) e.houseAddress = 'House address is required';
-      if (!form.country.trim()) e.country = 'Select your country';
-      if (!form.state.trim()) e.state = 'Select your state';
-      else if (statesList.length > 0 && !statesList.includes(form.state))
-        e.state = 'Select a state from the list';
-      if (!form.lga.trim()) e.lga = 'Select your city / LGA';
-      else if (citiesList.length > 0 && !citiesList.includes(form.lga))
-        e.lga = 'Select a city / LGA in the chosen state';
-      if (!form.mobileNumber.trim() || !validPhone(form.mobileNumber))
-        e.mobileNumber = `Enter a valid ${form.country} mobile number`;
-      if (form.altNumber && !validPhone(form.altNumber))
-        e.altNumber = `Enter a valid ${form.country} phone number`;
-      if (!/^\d{11}$/.test(form.bvn)) e.bvn = 'BVN must be 11 digits';
-      if (!/^\d{11}$/.test(form.nin)) e.nin = 'NIN must be 11 digits';
-      if (!form.validId && !isEditMode) e.validId = 'Upload a valid means of ID';
-      if (!form.proofOfAddress && !isEditMode)
-        e.proofOfAddress = 'Upload a proof of address so we can verify the address above';
-      if (!form.employmentStatus) {
-        e.employmentStatus = 'Select your employment status';
-      } else if (form.employmentStatus === 'employed') {
-        if (!form.employerName.trim()) e.employerName = 'Employer name is required';
-        if (!form.officeAddress.trim()) e.officeAddress = 'Office address is required';
-        if (!isEditMode) {
-          if (!form.offerLetter) e.offerLetter = 'Upload your offer letter';
-          if (!form.bankStatement) e.bankStatement = 'Upload your 6-month bank statement';
-          if (!form.staffId) e.staffId = 'Upload your staff ID';
-        }
-      } else {
-        if (!form.referenceName.trim()) e.referenceName = "Your reference's full name is required";
-        if (!form.referenceRelationship.trim())
-          e.referenceRelationship = 'State your relationship with the reference';
-        if (!form.referencePhone.trim()) e.referencePhone = "Your reference's phone number is required";
-        else if (!validPhone(form.referencePhone))
-          e.referencePhone = `Enter a valid ${form.country} phone number`;
-        if (!form.referenceAddress.trim()) e.referenceAddress = "Your reference's address is required";
-      }
+    switch (key) {
+      case 'personal':
+      case 'records':
+        validatePersonal(e);
+        break;
+      case 'purpose':
+        if (form.purposes.length === 0) e.purposes = 'Select at least one thing you are applying for';
+        break;
+      case 'loan':
+        validateLoan(e, !returning);
+        break;
+      case 'account':
+        validateAccount(e);
+        break;
+      case 'review':
+        if (!form.termsAccepted) e.termsAccepted = 'You must accept the Terms and Conditions';
+        break;
     }
-
-    if (s === 1) {
-      if (!loanAmountNum || loanAmountNum <= 0) e.loanAmount = 'Enter a loan amount';
-      if (form.purposes.length === 0) e.purposes = 'Select at least one purpose';
-      if (form.purposes.length > 0) {
-        for (const p of form.purposes) {
-          const v = Number(form.breakdown[p] || 0);
-          if (!v || v <= 0) e.breakdown = `Enter an amount for ${p}`;
-        }
-        if (!e.breakdown && Math.round(breakdownTotal) !== Math.round(loanAmountNum)) {
-          e.breakdown = `Breakdown total (${formatNaira(breakdownTotal)}) must equal loan amount (${formatNaira(
-            loanAmountNum
-          )})`;
-        }
-        for (const p of form.purposes) {
-          if (p !== 'Other' && !form.vendorIds[p]) {
-            e.vendors = `Select a vendor for ${p}`;
-            break;
-          }
-        }
-      }
-      if (form.purposes.includes('Other')) {
-        if (!/^\d{10}$/.test(form.accountNumber)) e.accountNumber = 'Account number must be 10 digits';
-        if (!form.bankName) e.bankName = 'Select your bank';
-        if (!form.accountName.trim()) e.accountName = 'Account name is required';
-      }
-    }
-
-    if (s === 2) {
-      if (!form.termsAccepted) e.termsAccepted = 'You must accept the Terms and Conditions';
-    }
-
     return e;
   };
 
   const goNext = () => {
-    const e = validateStep(step);
+    const e = validateStep(stepKey);
     setErrors(e);
     if (Object.keys(e).length === 0) {
-      setStep((s) => Math.min(s + 1, STEPS.length - 1));
+      setStep((s) => Math.min(s + 1, steps.length - 1));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (stepKey === 'records') {
+      // Saved records no longer pass validation (or need a fresh document):
+      // open the editor so the customer can see and fix what's flagged.
+      setRecordsView('edit');
+    }
+  };
+
+  const goToStep = (key: StepKey) => {
+    const i = steps.indexOf(key);
+    if (i >= 0) {
+      setStep(i);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  const changeAccountView = (view: 'keep' | 'change') => {
+    setAccountView(view);
+    setForm((prev) =>
+      view === 'change'
+        ? { ...prev, accountNumber: '', bankCode: '', bankName: '', accountName: '' }
+        : {
+            ...prev,
+            accountNumber: sourceApp?.accountNumber || '',
+            bankCode: '',
+            bankName: sourceApp?.bankName || '',
+            accountName: sourceApp?.accountName || '',
+          }
+    );
+    setErrors((prev) => ({ ...prev, accountNumber: '', bankName: '', accountName: '' }));
+    setDirty(true);
+  };
+
+  const startBlank = () => {
+    setReturning(false);
+    setForm(freshForm());
+    setErrors({});
+    setStep(0);
+    setDirty(false);
+    setDraftRestored(false);
+    if (draftKey) localStorage.removeItem(draftKey);
   };
 
   const goBack = () => {
@@ -595,20 +772,23 @@ export function Apply() {
     e.preventDefault();
     // Implicit submissions before the review step (Enter key, or the browser
     // treating a re-rendered Continue button as submit) advance instead.
-    if (step < STEPS.length - 1) {
+    if (step < steps.length - 1) {
       goNext();
       return;
     }
     setSubmitError(null);
 
-    const allErrors = [0, 1, 2].reduce<Record<string, string>>(
-      (acc, s) => ({ ...acc, ...validateStep(s) }),
+    const allErrors = steps.reduce<Record<string, string>>(
+      (acc, key) => ({ ...acc, ...validateStep(key) }),
       {}
     );
     if (Object.keys(allErrors).length > 0) {
       setErrors(allErrors);
-      const firstStep = [0, 1, 2].find((s) => Object.keys(validateStep(s)).length > 0);
-      if (firstStep != null) setStep(firstStep);
+      const firstStep = steps.findIndex((key) => Object.keys(validateStep(key)).length > 0);
+      if (firstStep >= 0) {
+        setStep(firstStep);
+        if (steps[firstStep] === 'records') setRecordsView('edit');
+      }
       return;
     }
 
@@ -675,6 +855,7 @@ export function Apply() {
       fd.append('bankName', payoutNeeded ? form.bankName.trim() : '');
       fd.append('accountName', payoutNeeded ? form.accountName.trim() : '');
       fd.append('termsAccepted', 'true');
+      if (returning && sourceApp && !isEditMode) fd.append('reuseDocumentsFrom', sourceApp._id);
       if (form.validId) fd.append('validId', form.validId);
       if (form.proofOfAddress) fd.append('proofOfAddress', form.proofOfAddress);
       if (isEmployed) {
@@ -716,6 +897,8 @@ export function Apply() {
       toast.success(
         isEditMode
           ? 'Application resubmitted — we’ll review again.'
+          : returning
+          ? 'Application submitted — that was quick! We’ll be in touch.'
           : 'Application submitted — we’ll be in touch.'
       );
       setDirty(false);
@@ -733,7 +916,7 @@ export function Apply() {
     }
   };
 
-  if (isEditMode && editLoading) {
+  if ((isEditMode && editLoading) || previousLoading) {
     return (
       <div className="container-sm page">
         <div className="card" style={{ display: 'grid', placeItems: 'center', minHeight: 200 }}>
@@ -754,18 +937,54 @@ export function Apply() {
     );
   }
 
+  const isLastStep = step >= steps.length - 1;
+  const showReturning = returning && !!sourceApp && !isEditMode;
+  // Only treat the saved account as "kept" while the form still holds exactly
+  // those details (a restored draft may hold a half-typed new account).
+  const keepingSavedAccount =
+    accountView === 'keep' &&
+    hasSavedAccount(sourceApp) &&
+    form.accountNumber === sourceApp?.accountNumber &&
+    form.bankName === sourceApp?.bankName;
+  const continueLabel =
+    stepKey === 'records' && recordsView === 'summary'
+      ? 'Confirm & continue'
+      : stepKey === 'account' && keepingSavedAccount
+      ? 'Use this account & continue'
+      : 'Continue';
+
   return (
     <div className="container-sm page">
       <div className="page-title" style={{ marginBottom: '1rem' }}>
-        <h1>{isEditMode ? 'Edit & resubmit application' : 'Loan application'}</h1>
+        <h1>
+          {isEditMode
+            ? 'Edit & resubmit application'
+            : showReturning
+            ? `Welcome back, ${user?.firstName || 'there'}`
+            : 'Loan application'}
+        </h1>
         <p>
           {isEditMode
             ? 'Update what was flagged in the rejection note and resubmit. Files are kept unless you upload new ones.'
+            : showReturning
+            ? 'Tell us what you need and confirm your saved details. Only update what has changed.'
             : 'Fill in the details below. You can move back and forth between sections.'}
         </p>
       </div>
 
-      {!isEditMode && user && !draftRestored && (
+      {showReturning && sourceApp && (
+        <div className="welcome-banner">
+          <div>
+            <strong>Good to see you again.</strong> We kept your details and documents from your
+            application on {formatDate(sourceApp.createdAt)}, so this one takes about a minute.
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={startBlank}>
+            Start with a blank form
+          </button>
+        </div>
+      )}
+
+      {!isEditMode && !showReturning && user && !draftRestored && (
         <div className="alert alert-info">
           We've pre-filled your name and email from your account. Update them here if anything has changed.
         </div>
@@ -777,8 +996,10 @@ export function Apply() {
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}
         >
           <span>
-            We restored the draft you were working on. For security your documents aren't saved —
-            please re-attach them before submitting.
+            We restored the draft you were working on.
+            {showReturning
+              ? ' Your documents on file are still used unless you upload replacements.'
+              : ' For security your documents aren\'t saved — please re-attach them before submitting.'}
           </span>
           <button type="button" className="btn btn-ghost" onClick={discardDraft}>
             Start fresh
@@ -787,10 +1008,10 @@ export function Apply() {
       )}
 
       <div className="stepper">
-        {STEPS.map((label, i) => (
-          <div key={label} className={`step ${i === step ? 'active' : ''}`}>
-            <span className="step-num">{i + 1}</span>
-            {label}
+        {steps.map((key, i) => (
+          <div key={key} className={`step ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`}>
+            <span className="step-num">{i < step ? '✓' : i + 1}</span>
+            {STEP_LABELS[key]}
           </div>
         ))}
       </div>
@@ -798,12 +1019,13 @@ export function Apply() {
       {submitError && <div className="alert alert-error">{submitError}</div>}
 
       <form onSubmit={handleSubmit} noValidate className="card">
-        {step < STEPS.length - 1 && (
+        {!isLastStep && stepKey !== 'purpose' && !(stepKey === 'records' && recordsView === 'summary') && (
           <p className="form-required-hint">
             Fields marked <span className="req-star">*</span> are required.
           </p>
         )}
-        {step === 0 && (
+
+        {stepKey === 'personal' && (
           <>
             <div className="alert alert-info">
               <strong>Documents:</strong> we accept PDF, PNG, and JPG files only. All your documents
@@ -815,6 +1037,8 @@ export function Apply() {
               errors={errors}
               attachFile={attachFile}
               formatPhone={formatPhone}
+              existing={existingFiles}
+              fileRequired={fileRequired}
               geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
             />
             <EmploymentStep
@@ -823,10 +1047,34 @@ export function Apply() {
               errors={errors}
               attachFile={attachFile}
               formatPhone={formatPhone}
+              existing={existingFiles}
+              fileRequired={fileRequired}
             />
           </>
         )}
-        {step === 1 && (
+
+        {stepKey === 'purpose' && (
+          <PurposeStep form={form} togglePurpose={togglePurpose} errors={errors} />
+        )}
+
+        {stepKey === 'records' && sourceApp && (
+          <RecordsStep
+            form={form}
+            update={update}
+            errors={errors}
+            attachFile={attachFile}
+            formatPhone={formatPhone}
+            existing={existingFiles}
+            fileRequired={fileRequired}
+            geo={{ countries, states: statesList, cities: citiesList, statesLoading, citiesLoading }}
+            view={recordsView}
+            onChangeView={setRecordsView}
+            addressChanged={addressChanged}
+            employerChanged={employerChanged}
+          />
+        )}
+
+        {stepKey === 'loan' && (
           <LoanStep
             form={form}
             update={update}
@@ -843,9 +1091,28 @@ export function Apply() {
             banks={banks}
             banksLoading={banksLoading}
             accountStatus={accountStatus}
+            compactPurposes={showReturning}
+            onChangePurposes={() => goToStep('purpose')}
+            hideAccount={showReturning}
+            previousAmount={showReturning ? sourceApp?.loanAmount : undefined}
           />
         )}
-        {step === 2 && (
+
+        {stepKey === 'account' && sourceApp && (
+          <AccountStep
+            form={form}
+            update={update}
+            errors={errors}
+            sourceApp={sourceApp}
+            view={keepingSavedAccount ? 'keep' : 'change'}
+            onChangeView={changeAccountView}
+            banks={banks}
+            banksLoading={banksLoading}
+            accountStatus={accountStatus}
+          />
+        )}
+
+        {stepKey === 'review' && (
           <ReviewStep
             form={form}
             update={update}
@@ -854,10 +1121,9 @@ export function Apply() {
             loanAmountNum={loanAmountNum}
             vendors={vendors}
             isEditMode={isEditMode}
-            onEdit={(s) => {
-              setStep(s);
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
+            returning={showReturning}
+            existing={existingFiles}
+            onEdit={goToStep}
           />
         )}
 
@@ -870,9 +1136,9 @@ export function Apply() {
           >
             Back
           </button>
-          {step < STEPS.length - 1 ? (
+          {!isLastStep ? (
             <button key="continue" type="button" className="btn" onClick={goNext}>
-              Continue
+              {continueLabel}
             </button>
           ) : (
             <button key="submit" type="submit" className="btn" disabled={submitting}>
@@ -894,9 +1160,13 @@ interface StepProps {
 interface FileStepProps extends StepProps {
   attachFile: (key: FileField, f: File | null) => void;
   formatPhone: (next: string, prev: string) => string;
+  /** Documents already on file (by original name) that can be kept. */
+  existing?: Partial<Record<FileField, string>>;
+  fileRequired?: (key: FileField) => boolean;
 }
 
-function PersonalStep({ form, update, errors, attachFile, formatPhone, geo }: FileStepProps & { geo: GeoLists }) {
+function PersonalStep({ form, update, errors, attachFile, formatPhone, geo, existing, fileRequired }: FileStepProps & { geo: GeoLists }) {
+  const isRequired = (k: FileField) => (fileRequired ? fileRequired(k) : true);
   const stateListReady = geo.states.length > 0;
   const cityListReady = geo.cities.length > 0;
   return (
@@ -1003,7 +1273,8 @@ function PersonalStep({ form, update, errors, attachFile, formatPhone, geo }: Fi
         onChange={(f) => attachFile('proofOfAddress', f)}
         error={errors.proofOfAddress}
         help="Recent utility bill, bank statement, or tenancy agreement showing the address above"
-        required
+        existing={existing?.proofOfAddress}
+        required={isRequired('proofOfAddress')}
       />
 
       <div className="section-title" style={{ marginTop: '1rem' }}>Identity verification</div>
@@ -1024,13 +1295,15 @@ function PersonalStep({ form, update, errors, attachFile, formatPhone, geo }: Fi
         onChange={(f) => attachFile('validId', f)}
         error={errors.validId}
         help="NIN slip, Driver's license, International passport, or Voter's card"
-        required
+        existing={existing?.validId}
+        required={isRequired('validId')}
       />
     </div>
   );
 }
 
-function EmploymentStep({ form, update, errors, attachFile, formatPhone }: FileStepProps) {
+function EmploymentStep({ form, update, errors, attachFile, formatPhone, existing, fileRequired }: FileStepProps) {
+  const isRequired = (k: FileField) => (fileRequired ? fileRequired(k) : true);
   return (
     <div>
       <div className="section-title" style={{ marginTop: '1.5rem' }}>Income declaration</div>
@@ -1079,7 +1352,8 @@ function EmploymentStep({ form, update, errors, attachFile, formatPhone }: FileS
               file={form.offerLetter}
               onChange={(f) => attachFile('offerLetter', f)}
               error={errors.offerLetter}
-              required
+              existing={existing?.offerLetter}
+              required={isRequired('offerLetter')}
             />
             <FileUpload
               label="6 months bank statement"
@@ -1087,7 +1361,8 @@ function EmploymentStep({ form, update, errors, attachFile, formatPhone }: FileS
               file={form.bankStatement}
               onChange={(f) => attachFile('bankStatement', f)}
               error={errors.bankStatement}
-              required
+              existing={existing?.bankStatement}
+              required={isRequired('bankStatement')}
             />
           </div>
 
@@ -1097,7 +1372,8 @@ function EmploymentStep({ form, update, errors, attachFile, formatPhone }: FileS
             file={form.staffId}
             onChange={(f) => attachFile('staffId', f)}
             error={errors.staffId}
-            required
+            existing={existing?.staffId}
+            required={isRequired('staffId')}
           />
         </>
       )}
@@ -1144,6 +1420,12 @@ interface LoanStepProps extends StepProps {
   banks: Bank[];
   banksLoading: boolean;
   accountStatus: AccountStatus;
+  /** Returning flow: purposes were picked on their own step, show a summary here. */
+  compactPurposes?: boolean;
+  onChangePurposes?: () => void;
+  /** Returning flow: the payout account has its own confirmation step. */
+  hideAccount?: boolean;
+  previousAmount?: number;
 }
 
 function LoanStep({
@@ -1162,6 +1444,10 @@ function LoanStep({
   banks,
   banksLoading,
   accountStatus,
+  compactPurposes,
+  onChangePurposes,
+  hideAccount,
+  previousAmount,
 }: LoanStepProps) {
   const showBreakdown = form.purposes.length > 1;
   const vendorPurposes = form.purposes.filter((p): p is VendorPurpose => p !== 'Other');
@@ -1178,7 +1464,17 @@ function LoanStep({
     <div>
       <div className="section-title">Loan request</div>
 
-      <Field label="Loan amount (₦)" id="loanAmount" error={errors.loanAmount} required>
+      <Field
+        label="Loan amount (₦)"
+        id="loanAmount"
+        error={errors.loanAmount}
+        help={
+          previousAmount
+            ? `You asked for ${formatNaira(previousAmount)} last time — confirm it or enter a new amount.`
+            : undefined
+        }
+        required
+      >
         <input
           id="loanAmount"
           inputMode="numeric"
@@ -1200,23 +1496,36 @@ function LoanStep({
         </div>
       )}
 
-      <div className="form-group">
-        <label>
-          Purpose<span className="req-star" aria-hidden="true"> *</span>
-        </label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
-          {PURPOSES.map((p) => {
-            const checked = form.purposes.includes(p);
-            return (
-              <label key={p} className={`checkbox-row ${checked ? 'checked' : ''}`}>
-                <input type="checkbox" checked={checked} onChange={() => togglePurpose(p)} />
-                <span>{p}</span>
-              </label>
-            );
-          })}
+      {compactPurposes ? (
+        <div className="form-group">
+          <label>Applying for</label>
+          <div className="purpose-summary">
+            <span>{form.purposes.map(purposeLabel).join(', ') || 'Nothing selected yet'}</span>
+            <button type="button" className="review-edit-btn" onClick={onChangePurposes}>
+              Change
+            </button>
+          </div>
+          {errors.purposes && <span className="field-error">{errors.purposes}</span>}
         </div>
-        {errors.purposes && <span className="field-error">{errors.purposes}</span>}
-      </div>
+      ) : (
+        <div className="form-group">
+          <label>
+            Purpose<span className="req-star" aria-hidden="true"> *</span>
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+            {PURPOSES.map((p) => {
+              const checked = form.purposes.includes(p);
+              return (
+                <label key={p} className={`checkbox-row ${checked ? 'checked' : ''}`}>
+                  <input type="checkbox" checked={checked} onChange={() => togglePurpose(p)} />
+                  <span>{p}</span>
+                </label>
+              );
+            })}
+          </div>
+          {errors.purposes && <span className="field-error">{errors.purposes}</span>}
+        </div>
+      )}
 
       {showBreakdown && (
         <div className="form-group">
@@ -1318,83 +1627,107 @@ function LoanStep({
         </div>
       )}
 
-      {form.purposes.includes('Other') && (
-        <>
-          <div className="alert alert-info">
-            For other essentials we pay the approved amount directly to your bank account. Enter
-            your account details below — we'll verify them with your bank.
-          </div>
-
-          <div className="form-row">
-            <Field label="Account number (10 digits)" id="accountNumber" error={errors.accountNumber} required>
-              <input
-                id="accountNumber"
-                inputMode="numeric"
-                maxLength={10}
-                value={form.accountNumber}
-                onChange={(e) => {
-                  update('accountNumber', e.target.value.replace(/\D/g, '').slice(0, 10));
-                  if (form.accountName) update('accountName', '');
-                }}
-                aria-invalid={!!errors.accountNumber}
-              />
-            </Field>
-            <Field label="Bank" id="bankCode" error={errors.bankName} required>
-              <SearchSelect
-                id="bankCode"
-                value={form.bankName}
-                options={banks.map((b) => b.name)}
-                placeholder="Search your bank"
-                loading={banksLoading}
-                invalid={!!errors.bankName}
-                onSelect={(name) => {
-                  const bank = banks.find((b) => b.name === name);
-                  update('bankCode', bank?.code || '');
-                  update('bankName', name);
-                  if (form.accountName) update('accountName', '');
-                }}
-              />
-            </Field>
-          </div>
-
-          <Field
-            label="Account name"
-            id="accountName"
-            error={errors.accountName}
-            required
-            help={
-              accountStatus === 'verifying'
-                ? 'Verifying account…'
-                : accountStatus === 'verified'
-                ? '✓ Verified with your bank'
-                : accountStatus === 'manual'
-                ? 'Automatic verification is unavailable — type the account name exactly as your bank has it'
-                : accountStatus === 'failed'
-                ? "We couldn't verify this account — double-check the number and bank, or type the account name exactly as your bank has it"
-                : 'Auto-filled once your account number and bank are verified'
-            }
-          >
-            <input
-              id="accountName"
-              value={form.accountName}
-              readOnly={accountStatus === 'verified' || accountStatus === 'verifying'}
-              onChange={(e) => update('accountName', e.target.value)}
-              aria-invalid={!!errors.accountName}
-              placeholder={accountStatus === 'verifying' ? 'Verifying…' : ''}
-            />
-          </Field>
-        </>
+      {!hideAccount && form.purposes.includes('Other') && (
+        <PayoutAccountFields
+          form={form}
+          update={update}
+          errors={errors}
+          banks={banks}
+          banksLoading={banksLoading}
+          accountStatus={accountStatus}
+        />
       )}
     </div>
   );
 }
+
+interface PayoutAccountProps extends StepProps {
+  banks: Bank[];
+  banksLoading: boolean;
+  accountStatus: AccountStatus;
+  hideIntro?: boolean;
+}
+
+function PayoutAccountFields({ form, update, errors, banks, banksLoading, accountStatus, hideIntro }: PayoutAccountProps) {
+  return (
+    <>
+    <div className="alert alert-info">
+      For other essentials we pay the approved amount directly to your bank account. Enter
+      your account details below — we'll verify them with your bank.
+    </div>
+
+    <div className="form-row">
+      <Field label="Account number (10 digits)" id="accountNumber" error={errors.accountNumber} required>
+        <input
+          id="accountNumber"
+          inputMode="numeric"
+          maxLength={10}
+          value={form.accountNumber}
+          onChange={(e) => {
+            update('accountNumber', e.target.value.replace(/\D/g, '').slice(0, 10));
+            if (form.accountName) update('accountName', '');
+          }}
+          aria-invalid={!!errors.accountNumber}
+        />
+      </Field>
+      <Field label="Bank" id="bankCode" error={errors.bankName} required>
+        <SearchSelect
+          id="bankCode"
+          value={form.bankName}
+          options={banks.map((b) => b.name)}
+          placeholder="Search your bank"
+          loading={banksLoading}
+          invalid={!!errors.bankName}
+          onSelect={(name) => {
+            const bank = banks.find((b) => b.name === name);
+            update('bankCode', bank?.code || '');
+            update('bankName', name);
+            if (form.accountName) update('accountName', '');
+          }}
+        />
+      </Field>
+    </div>
+
+    <Field
+      label="Account name"
+      id="accountName"
+      error={errors.accountName}
+      required
+      help={
+        accountStatus === 'verifying'
+          ? 'Verifying account…'
+          : accountStatus === 'verified'
+          ? '✓ Verified with your bank'
+          : accountStatus === 'manual'
+          ? 'Automatic verification is unavailable — type the account name exactly as your bank has it'
+          : accountStatus === 'failed'
+          ? "We couldn't verify this account — double-check the number and bank, or type the account name exactly as your bank has it"
+          : 'Auto-filled once your account number and bank are verified'
+      }
+    >
+      <input
+        id="accountName"
+        value={form.accountName}
+        readOnly={accountStatus === 'verified' || accountStatus === 'verifying'}
+        onChange={(e) => update('accountName', e.target.value)}
+        aria-invalid={!!errors.accountName}
+        placeholder={accountStatus === 'verifying' ? 'Verifying…' : ''}
+      />
+    </Field>
+    </>
+  );
+}
+
+const purposeLabel = (p: Purpose) => (p === 'Other' ? 'Others' : p);
 
 interface ReviewStepProps extends StepProps {
   breakdownTotal: number;
   loanAmountNum: number;
   vendors: Vendor[];
   isEditMode: boolean;
-  onEdit: (step: number) => void;
+  returning?: boolean;
+  existing?: Partial<Record<FileField, string>>;
+  onEdit: (step: StepKey) => void;
 }
 
 function ReviewStep({
@@ -1405,6 +1738,8 @@ function ReviewStep({
   loanAmountNum,
   vendors,
   isEditMode,
+  returning,
+  existing,
   onEdit,
 }: ReviewStepProps) {
   const vendorName = (p: Purpose) => {
@@ -1413,6 +1748,13 @@ function ReviewStep({
   };
   const vendorPurposes = form.purposes.filter((p) => p !== 'Other');
   const missingFileNote = isEditMode ? 'Keeping previously uploaded file' : 'Not uploaded';
+  const chipName = (k: FileField) => {
+    const fresh = form[k]?.name;
+    if (fresh) return fresh;
+    if (returning && existing?.[k]) return `On file · ${existing[k]}`;
+    return undefined;
+  };
+  const personalStep: StepKey = returning ? 'records' : 'personal';
 
   return (
     <div>
@@ -1423,7 +1765,7 @@ function ReviewStep({
       </p>
 
       <div className="review-grid">
-        <ReviewCard title="Personal" onEdit={() => onEdit(0)}>
+        <ReviewCard title="Personal" onEdit={() => onEdit(personalStep)}>
           <ReviewRow label="Full name" value={[form.surname, form.firstName, form.middleName].filter(Boolean).join(' ')} />
           <ReviewRow label="Email" value={form.email} />
           <ReviewRow label="Address" value={[form.houseAddress, form.lga, form.state, form.country].filter(Boolean).join(', ')} />
@@ -1431,12 +1773,12 @@ function ReviewStep({
           <ReviewRow label="BVN" value={form.bvn} />
           <ReviewRow label="NIN" value={form.nin} />
           <div className="review-files">
-            <FileChip label="Valid ID" name={form.validId?.name} fallback={missingFileNote} />
-            <FileChip label="Proof of address" name={form.proofOfAddress?.name} fallback={missingFileNote} />
+            <FileChip label="Valid ID" name={chipName('validId')} fallback={missingFileNote} />
+            <FileChip label="Proof of address" name={chipName('proofOfAddress')} fallback={missingFileNote} />
           </div>
         </ReviewCard>
 
-        <ReviewCard title="Employment" onEdit={() => onEdit(0)}>
+        <ReviewCard title="Employment" onEdit={() => onEdit(personalStep)}>
           <ReviewRow
             label="Status"
             value={form.employmentStatus === 'not-working' ? 'Not currently working' : 'Employed'}
@@ -1452,18 +1794,18 @@ function ReviewStep({
               <ReviewRow label="Employer" value={form.employerName} />
               <ReviewRow label="Office address" value={form.officeAddress} />
               <div className="review-files">
-                <FileChip label="Offer letter" name={form.offerLetter?.name} fallback={missingFileNote} />
-                <FileChip label="Bank statement" name={form.bankStatement?.name} fallback={missingFileNote} />
-                <FileChip label="Staff ID" name={form.staffId?.name} fallback={missingFileNote} />
+                <FileChip label="Offer letter" name={chipName('offerLetter')} fallback={missingFileNote} />
+                <FileChip label="Bank statement" name={chipName('bankStatement')} fallback={missingFileNote} />
+                <FileChip label="Staff ID" name={chipName('staffId')} fallback={missingFileNote} />
               </div>
             </>
           )}
         </ReviewCard>
 
-        <ReviewCard title="Loan request" onEdit={() => onEdit(1)}>
+        <ReviewCard title="Loan request" onEdit={() => onEdit('loan')}>
           <ReviewRow label="Amount borrowed" value={formatNaira(loanAmountNum)} />
           <ReviewRow label="Total to repay" value={formatNaira(totalRepayable(loanAmountNum))} emphasis />
-          <ReviewRow label="Purpose" value={form.purposes.join(', ')} />
+          <ReviewRow label="Purpose" value={form.purposes.map(purposeLabel).join(', ')} />
           {form.purposes.length > 1 && (
             <>
               {form.purposes.map((p) => (
@@ -1475,7 +1817,7 @@ function ReviewStep({
           {vendorPurposes.map((p) => (
             <ReviewRow key={`vendor-${p}`} label={`Vendor · ${p}`} value={vendorName(p)} />
           ))}
-          {form.purposes.includes('Other') && (
+          {form.purposes.includes('Other') && !returning && (
             <>
               <ReviewRow label="Bank" value={form.bankName} />
               <ReviewRow label="Account number" value={form.accountNumber} />
@@ -1483,6 +1825,14 @@ function ReviewStep({
             </>
           )}
         </ReviewCard>
+
+        {form.purposes.includes('Other') && returning && (
+          <ReviewCard title="Receiving account" onEdit={() => onEdit('account')}>
+            <ReviewRow label="Bank" value={form.bankName} />
+            <ReviewRow label="Account number" value={form.accountNumber} />
+            <ReviewRow label="Account name" value={form.accountName} />
+          </ReviewCard>
+        )}
       </div>
 
       <div className="form-group" style={{ marginTop: '1rem' }}>
@@ -1657,6 +2007,7 @@ function FileUpload({
   error,
   help,
   required,
+  existing,
 }: {
   label: string;
   id: string;
@@ -1665,20 +2016,33 @@ function FileUpload({
   error?: string;
   help?: string;
   required?: boolean;
+  /** Name of the document already on file; shown when no new file is attached. */
+  existing?: string;
 }) {
   const [localError, setLocalError] = useState<string | null>(null);
   const shownError = localError || error;
+  const keeping = !file && !!existing && !required;
   return (
     <div className="form-group">
       <label htmlFor={id}>
         {label}
         {required && <span className="req-star" aria-hidden="true"> *</span>}
       </label>
-      <label className={`file-drop ${file ? 'has-file' : ''}`}>
-        <span className="file-drop-label">{file ? file.name : `Click to upload ${label.toLowerCase()}`}</span>
+      <label className={`file-drop ${file ? 'has-file' : keeping ? 'on-file' : ''}`}>
+        <span className="file-drop-label">
+          {file
+            ? file.name
+            : existing
+            ? `On file: ${existing}`
+            : `Click to upload ${label.toLowerCase()}`}
+        </span>
         <span className="file-drop-meta">
           {file
             ? `${(file.size / 1024).toFixed(0)} KB`
+            : existing
+            ? required
+              ? `A new ${label.toLowerCase()} is needed — click to upload (${ACCEPTED_LABEL}, max ${MAX_FILE_BYTES / MB} MB)`
+              : `We'll keep this one. Click to replace it (${ACCEPTED_LABEL}, max ${MAX_FILE_BYTES / MB} MB)`
             : `${help ? `${help} · ` : ''}${ACCEPTED_LABEL} · max ${MAX_FILE_BYTES / MB} MB`}
         </span>
         <input
@@ -1719,10 +2083,12 @@ function FileUpload({
 function ReviewCard({
   title,
   onEdit,
+  editLabel = 'Edit',
   children,
 }: {
   title: string;
   onEdit: () => void;
+  editLabel?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -1730,7 +2096,7 @@ function ReviewCard({
       <div className="review-card-head">
         <h3>{title}</h3>
         <button type="button" className="review-edit-btn" onClick={onEdit}>
-          Edit
+          {editLabel}
         </button>
       </div>
       <div className="review-rows">{children}</div>
@@ -1753,5 +2119,189 @@ function FileChip({ label, name, fallback }: { label: string; name?: string; fal
       <span className="file-chip-label">{label}</span>
       {name || fallback}
     </span>
+  );
+}
+
+/* ---------- Returning-customer steps ---------- */
+
+const PURPOSE_COPY: Record<Purpose, string> = {
+  Groceries: 'Paid directly to a partner grocery store you pick.',
+  Medications: 'Paid directly to a partner pharmacy you pick.',
+  Other: 'Other essentials — paid into your bank account.',
+};
+
+function PurposeStep({
+  form,
+  togglePurpose,
+  errors,
+}: {
+  form: ApplyFormState;
+  togglePurpose: (p: Purpose) => void;
+  errors: Record<string, string>;
+}) {
+  return (
+    <div>
+      <div className="section-title">What are you applying for?</div>
+      <p className="review-intro">
+        Pick everything that applies. You can choose groceries and medications together; "Others"
+        is on its own because it's paid to your account instead of a vendor.
+      </p>
+      <div className="purpose-grid" role="group" aria-label="Loan purpose">
+        {PURPOSES.map((p) => {
+          const checked = form.purposes.includes(p);
+          return (
+            <label key={p} className={`purpose-card ${checked ? 'checked' : ''}`}>
+              <input type="checkbox" checked={checked} onChange={() => togglePurpose(p)} />
+              <span className="purpose-card-check" aria-hidden="true">{checked ? '✓' : ''}</span>
+              <span className="purpose-card-body">
+                <strong>{purposeLabel(p)}</strong>
+                <span>{PURPOSE_COPY[p]}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+      {errors.purposes && <span className="field-error">{errors.purposes}</span>}
+    </div>
+  );
+}
+
+interface RecordsStepProps extends FileStepProps {
+  geo: GeoLists;
+  view: 'summary' | 'edit';
+  onChangeView: (v: 'summary' | 'edit') => void;
+  addressChanged: boolean;
+  employerChanged: boolean;
+}
+
+function RecordsStep(props: RecordsStepProps) {
+  const { form, existing, view, onChangeView, addressChanged, employerChanged } = props;
+  const onFile = (k: FileField) => (existing?.[k] ? `On file · ${existing[k]}` : undefined);
+
+  if (view === 'edit') {
+    return (
+      <div>
+        <div className="section-title">Update your records</div>
+        <div className="alert alert-info">
+          Change anything that's different now. Documents on file are kept unless you upload a
+          replacement
+          {addressChanged && ' — since your address changed, please upload a new proof of address'}
+          {employerChanged && ' — since your employer changed, please upload your new offer letter, staff ID and a recent bank statement'}
+          .
+        </div>
+        <PersonalStep {...props} />
+        <EmploymentStep {...props} />
+        <div className="records-actions">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChangeView('summary')}>
+            Back to summary
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="section-title">Your saved records</div>
+      <p className="review-intro">
+        These are the details from your last application. If they're still correct, confirm and
+        carry on. If anything has changed, update it first.
+      </p>
+
+      <div className="review-grid">
+        <ReviewCard title="Personal" onEdit={() => onChangeView('edit')} editLabel="Update">
+          <ReviewRow label="Full name" value={[form.surname, form.firstName, form.middleName].filter(Boolean).join(' ')} />
+          <ReviewRow label="Email" value={form.email} />
+          <ReviewRow label="Address" value={[form.houseAddress, form.lga, form.state, form.country].filter(Boolean).join(', ')} />
+          <ReviewRow label="Mobile" value={`${form.mobileNumber}${form.altNumber ? ` · Alt: ${form.altNumber}` : ''}`} />
+          <ReviewRow label="BVN" value={form.bvn} />
+          <ReviewRow label="NIN" value={form.nin} />
+          <div className="review-files">
+            <FileChip label="Valid ID" name={form.validId?.name || onFile('validId')} fallback="Not on file" />
+            <FileChip label="Proof of address" name={form.proofOfAddress?.name || onFile('proofOfAddress')} fallback="Not on file" />
+          </div>
+        </ReviewCard>
+
+        <ReviewCard title="Employment" onEdit={() => onChangeView('edit')} editLabel="Update">
+          <ReviewRow
+            label="Status"
+            value={form.employmentStatus === 'not-working' ? 'Not currently working' : 'Employed'}
+          />
+          {form.employmentStatus === 'not-working' ? (
+            <>
+              <ReviewRow label="Loan reference" value={`${form.referenceName}${form.referenceRelationship ? ` (${form.referenceRelationship})` : ''}`} />
+              <ReviewRow label="Reference phone" value={form.referencePhone} />
+              <ReviewRow label="Reference address" value={form.referenceAddress} />
+            </>
+          ) : (
+            <>
+              <ReviewRow label="Employer" value={form.employerName} />
+              <ReviewRow label="Office address" value={form.officeAddress} />
+              <div className="review-files">
+                <FileChip label="Offer letter" name={form.offerLetter?.name || onFile('offerLetter')} fallback="Not on file" />
+                <FileChip label="Bank statement" name={form.bankStatement?.name || onFile('bankStatement')} fallback="Not on file" />
+                <FileChip label="Staff ID" name={form.staffId?.name || onFile('staffId')} fallback="Not on file" />
+              </div>
+            </>
+          )}
+        </ReviewCard>
+      </div>
+
+      <div className="records-actions">
+        <button type="button" className="btn btn-secondary" onClick={() => onChangeView('edit')}>
+          Something has changed — update my details
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface AccountStepProps extends PayoutAccountProps {
+  sourceApp: Application;
+  view: 'keep' | 'change';
+  onChangeView: (v: 'keep' | 'change') => void;
+}
+
+function AccountStep({ sourceApp, view, onChangeView, ...fields }: AccountStepProps) {
+  const saved = hasSavedAccount(sourceApp);
+  return (
+    <div>
+      <div className="section-title">Receiving account</div>
+      <p className="review-intro">
+        If approved, the "Others" part of your loan is paid straight into this account.
+      </p>
+
+      {saved && view === 'keep' ? (
+        <>
+          <div className="saved-account">
+            <div className="saved-account-body">
+              <div className="saved-account-bank">{sourceApp.bankName}</div>
+              <div className="saved-account-number mono">{sourceApp.accountNumber}</div>
+              <div className="saved-account-name">{sourceApp.accountName}</div>
+            </div>
+            <span className="badge badge-approved">On file</span>
+          </div>
+          <div className="records-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => onChangeView('change')}>
+              Use a different account
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {saved && (
+            <div className="records-actions" style={{ marginTop: 0 }}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChangeView('keep')}>
+                ← Keep my saved account ({sourceApp.bankName} · {sourceApp.accountNumber})
+              </button>
+            </div>
+          )}
+          <div className="alert alert-info">
+            New account details are verified with your bank before we can pay into them.
+          </div>
+          <PayoutAccountFields {...fields} hideIntro />
+        </>
+      )}
+    </div>
   );
 }

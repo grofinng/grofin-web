@@ -57,14 +57,67 @@ router.post('/', protect, (req, res, next) => {
 
       const employmentStatus = body.employmentStatus === 'not-working' ? 'not-working' : 'employed';
 
+      // Returning customers can reuse the documents from a previous application
+      // of theirs instead of uploading everything again. Documents that verify
+      // something that changed (address, employer) must be re-uploaded.
+      let previous = null;
+      if (body.reuseDocumentsFrom) {
+        previous = await Application.findOne({ _id: body.reuseDocumentsFrom, user: req.user._id });
+        if (!previous) {
+          return res.status(400).json({ message: 'We could not find your previous application to reuse documents from' });
+        }
+      }
+      const norm = (v) => String(v || '').trim().toLowerCase();
+      const addressChanged =
+        !!previous &&
+        ['houseAddress', 'lga', 'state', 'country'].some((k) => norm(body[k]) !== norm(previous[k]));
+      const employerChanged =
+        !!previous &&
+        employmentStatus === 'employed' &&
+        (previous.employmentStatus !== 'employed' || norm(body.employerName) !== norm(previous.employerName));
+      const mustRefresh = {
+        validId: false,
+        proofOfAddress: addressChanged,
+        offerLetter: employerChanged,
+        bankStatement: employerChanged,
+        staffId: employerChanged,
+      };
+      const REFRESH_REASON = {
+        proofOfAddress: 'Your address changed, so please upload a new proof of address',
+        offerLetter: 'Your employer changed, so please upload a new offer letter',
+        bankStatement: 'Your employer changed, so please upload a recent bank statement',
+        staffId: 'Your employer changed, so please upload your new staff ID',
+      };
+      const FILE_LABEL = {
+        validId: 'Valid ID',
+        proofOfAddress: 'Proof of address',
+        offerLetter: 'Offer letter',
+        bankStatement: 'Bank statement',
+        staffId: 'Staff ID',
+      };
+      const reusedFile = (f) => {
+        if (req.files?.[f]?.[0]) return undefined;
+        if (!previous || !previous[f] || !previous[f].path || mustRefresh[f]) return undefined;
+        const src = previous[f];
+        return {
+          originalName: src.originalName,
+          filename: src.filename,
+          mimetype: src.mimetype,
+          size: src.size,
+          path: src.path,
+        };
+      };
+
       const required =
         employmentStatus === 'employed'
           ? ['offerLetter', 'bankStatement', 'staffId', 'validId', 'proofOfAddress']
           : ['validId', 'proofOfAddress'];
       for (const f of required) {
-        if (!req.files || !req.files[f] || !req.files[f][0]) {
-          return res.status(400).json({ message: `${f} file is required` });
-        }
+        const uploaded = req.files && req.files[f] && req.files[f][0];
+        if (uploaded || reusedFile(f)) continue;
+        const message =
+          previous && mustRefresh[f] ? REFRESH_REASON[f] : `${FILE_LABEL[f]} file is required`;
+        return res.status(400).json({ message });
       }
 
       if (employmentStatus === 'not-working') {
@@ -80,11 +133,11 @@ router.post('/', protect, (req, res, next) => {
       }
 
       const [offerLetter, bankStatement, staffId, validId, proofOfAddress] = await Promise.all([
-        fileFromMulter(req.files.offerLetter?.[0], 'offerLetter'),
-        fileFromMulter(req.files.bankStatement?.[0], 'bankStatement'),
-        fileFromMulter(req.files.staffId?.[0], 'staffId'),
-        fileFromMulter(req.files.validId?.[0], 'validId'),
-        fileFromMulter(req.files.proofOfAddress?.[0], 'proofOfAddress'),
+        fileFromMulter(req.files?.offerLetter?.[0], 'offerLetter'),
+        fileFromMulter(req.files?.bankStatement?.[0], 'bankStatement'),
+        fileFromMulter(req.files?.staffId?.[0], 'staffId'),
+        fileFromMulter(req.files?.validId?.[0], 'validId'),
+        fileFromMulter(req.files?.proofOfAddress?.[0], 'proofOfAddress'),
       ]);
 
       const application = await Application.create({
@@ -120,11 +173,11 @@ router.post('/', protect, (req, res, next) => {
         accountNumber: body.accountNumber || '',
         bankName: body.bankName || '',
         accountName: body.accountName || '',
-        offerLetter,
-        bankStatement,
-        staffId,
-        validId,
-        proofOfAddress,
+        offerLetter: offerLetter || reusedFile('offerLetter'),
+        bankStatement: bankStatement || reusedFile('bankStatement'),
+        staffId: staffId || reusedFile('staffId'),
+        validId: validId || reusedFile('validId'),
+        proofOfAddress: proofOfAddress || reusedFile('proofOfAddress'),
         termsAccepted: true,
         status: 'received',
       });
