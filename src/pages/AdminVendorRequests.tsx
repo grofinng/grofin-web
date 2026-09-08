@@ -1,15 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { vendorRequestsApi } from '../api/vendorRequests';
 import { contactRequestsApi } from '../api/contactRequests';
+import { applicationsApi } from '../api/applications';
 import { extractApiError } from '../api/client';
-import { FileLink } from '../components/FileLink';
-import { ContactRequest, VendorRequest, VendorRequestStatus } from '../types';
-import { formatDate } from '../utils/format';
+import { DocumentItem, DocumentList } from '../components/DocumentViewer';
+import { ApplicationReview, applicationDocuments } from '../components/ApplicationReview';
+import { StatusBadge } from '../components/StatusBadge';
+import { Application, ContactRequest, VendorRequest, VendorRequestStatus } from '../types';
+import { formatDate, formatNaira } from '../utils/format';
 
-type TypeFilter = 'all' | 'partner' | 'contact';
+type TypeFilter = 'all' | 'loan' | 'partner' | 'contact';
 type StatusFilter = 'all' | 'pending' | 'closed';
 
+interface LoanItem {
+  type: 'loan';
+  id: string;
+  createdAt: string;
+  data: Application;
+}
 interface PartnerItem {
   type: 'partner';
   id: string;
@@ -22,7 +31,7 @@ interface ContactItem {
   createdAt: string;
   data: ContactRequest;
 }
-type Item = PartnerItem | ContactItem;
+type Item = LoanItem | PartnerItem | ContactItem;
 
 const VENDOR_BADGE: Record<VendorRequestStatus, string> = {
   pending: 'badge-processing',
@@ -30,7 +39,20 @@ const VENDOR_BADGE: Record<VendorRequestStatus, string> = {
   rejected: 'badge-rejected',
 };
 
+const TYPE_LABEL: Record<TypeFilter, string> = {
+  all: 'All types',
+  loan: 'Loans',
+  partner: 'Partners',
+  contact: 'Contact',
+};
+
+function isPending(it: Item) {
+  if (it.type === 'loan') return it.data.status === 'received' || it.data.status === 'processing';
+  return it.data.status === 'pending';
+}
+
 export function AdminRequests() {
+  const [loans, setLoans] = useState<Application[]>([]);
   const [partners, setPartners] = useState<VendorRequest[]>([]);
   const [contacts, setContacts] = useState<ContactRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,14 +65,16 @@ export function AdminRequests() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([vendorRequestsApi.list(), contactRequestsApi.list()])
-      .then(([p, c]) => {
-        if (cancelled) return;
-        setPartners(p);
-        setContacts(c);
-      })
-      .catch((err) => !cancelled && setError(extractApiError(err, 'Could not load requests')))
-      .finally(() => !cancelled && setLoading(false));
+    // Each feed loads independently so one failing source doesn't blank the page.
+    const settle = <T,>(p: Promise<T[]>, set: (v: T[]) => void, label: string) =>
+      p.then((v) => !cancelled && set(v)).catch((err) => {
+        if (!cancelled) setError((prev) => prev || extractApiError(err, `Could not load ${label}`));
+      });
+    Promise.all([
+      settle(applicationsApi.adminListAll(), setLoans, 'loan applications'),
+      settle(vendorRequestsApi.list(), setPartners, 'partner requests'),
+      settle(contactRequestsApi.list(), setContacts, 'contact requests'),
+    ]).finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
@@ -58,35 +82,34 @@ export function AdminRequests() {
 
   const combined = useMemo<Item[]>(() => {
     const items: Item[] = [
+      ...loans.map<LoanItem>((a) => ({ type: 'loan', id: a._id, createdAt: a.createdAt, data: a })),
       ...partners.map<PartnerItem>((p) => ({ type: 'partner', id: p._id, createdAt: p.createdAt, data: p })),
       ...contacts.map<ContactItem>((c) => ({ type: 'contact', id: c._id, createdAt: c.createdAt, data: c })),
     ];
     items.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     return items;
-  }, [partners, contacts]);
+  }, [loans, partners, contacts]);
 
   const filtered = useMemo(() => {
     return combined.filter((it) => {
       if (typeFilter !== 'all' && it.type !== typeFilter) return false;
-      if (statusFilter !== 'all') {
-        const isPending = it.data.status === 'pending';
-        if (statusFilter === 'pending' && !isPending) return false;
-        if (statusFilter === 'closed' && isPending) return false;
-      }
+      if (statusFilter === 'pending' && !isPending(it)) return false;
+      if (statusFilter === 'closed' && isPending(it)) return false;
       return true;
     });
   }, [combined, typeFilter, statusFilter]);
 
   const counts = useMemo(() => {
+    const byType = (t: TypeFilter) => (t === 'all' ? combined : combined.filter((i) => i.type === t));
+    const pendingOf = (t: TypeFilter) => byType(t).filter(isPending).length;
     return {
-      all: combined.length,
-      partner: partners.length,
-      contact: contacts.length,
-      pending:
-        partners.filter((p) => p.status === 'pending').length +
-        contacts.filter((c) => c.status === 'pending').length,
+      total: { all: combined.length, loan: loans.length, partner: partners.length, contact: contacts.length },
+      pending: { all: pendingOf('all'), loan: pendingOf('loan'), partner: pendingOf('partner'), contact: pendingOf('contact') },
     };
-  }, [combined, partners, contacts]);
+  }, [combined, loans, partners, contacts]);
+
+  const onLoanUpdated = (updated: Application) =>
+    setLoans((prev) => prev.map((a) => (a._id === updated._id ? updated : a)));
 
   const approvePartner = async (req: VendorRequest) => {
     setActingId(req._id);
@@ -148,270 +171,372 @@ export function AdminRequests() {
     }
   };
 
+  const toggle = (id: string) => setOpenId((cur) => (cur === id ? null : id));
+
+  const rowProps = (id: string) => ({
+    role: 'button' as const,
+    tabIndex: 0,
+    onClick: () => toggle(id),
+    onKeyDown: (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        toggle(id);
+      }
+    },
+  });
+
+  const reviewButton = (id: string) => (
+    <button
+      type="button"
+      className="btn btn-ghost btn-sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle(id);
+      }}
+    >
+      {openId === id ? 'Close' : 'Review'}
+    </button>
+  );
+
   return (
     <div className="container page">
       <div className="page-header">
         <div className="page-title">
           <h1>Admin · Requests</h1>
-          <p>Partner sign-ups and contact form enquiries.</p>
+          <p>Everything waiting on you in one inbox: loan applications, partner sign-ups and contact enquiries.</p>
         </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="admin-toolbar">
-        {(['all', 'partner', 'contact'] as TypeFilter[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`filter-pill ${typeFilter === f ? 'active' : ''}`}
-            onClick={() => setTypeFilter(f)}
-          >
-            {f === 'all' ? 'All types' : f === 'partner' ? 'Partner' : 'Contact'}
-            <span style={{ marginLeft: 6, opacity: 0.7 }}>
-              · {f === 'all' ? counts.all : f === 'partner' ? counts.partner : counts.contact}
-            </span>
-          </button>
-        ))}
-        <span style={{ width: 12 }} />
-        {(['pending', 'closed', 'all'] as StatusFilter[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={`filter-pill ${statusFilter === f ? 'active' : ''}`}
-            onClick={() => setStatusFilter(f)}
-          >
-            {f === 'pending' ? 'Pending' : f === 'closed' ? 'Closed' : 'Any status'}
-            {f === 'pending' && (
-              <span style={{ marginLeft: 6, opacity: 0.7 }}>· {counts.pending}</span>
-            )}
-          </button>
-        ))}
+      <div className="stat-grid">
+        <div className="card stat-card">
+          <div className="stat-label">Loans awaiting decision</div>
+          <div className="stat-value">{counts.pending.loan}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-label">Partner sign-ups pending</div>
+          <div className="stat-value">{counts.pending.partner}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-label">Enquiries open</div>
+          <div className="stat-value">{counts.pending.contact}</div>
+        </div>
+        <div className="card stat-card">
+          <div className="stat-label">All requests</div>
+          <div className="stat-value">{counts.total.all}</div>
+        </div>
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="admin-toolbar">
+        <div className="filter-group" aria-label="Request type">
+          {(['all', 'loan', 'partner', 'contact'] as TypeFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={`filter-pill ${typeFilter === f ? 'active' : ''}`}
+              onClick={() => setTypeFilter(f)}
+            >
+              {TYPE_LABEL[f]}
+              <span className="filter-count">
+                · {statusFilter === 'pending' ? counts.pending[f] : counts.total[f]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="filter-group" aria-label="Request status">
+          {(['pending', 'closed', 'all'] as StatusFilter[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={`filter-pill ${statusFilter === f ? 'active' : ''}`}
+              onClick={() => setStatusFilter(f)}
+            >
+              {f === 'pending' ? 'Pending' : f === 'closed' ? 'Closed' : 'Any status'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="card admin-list">
         {loading ? (
-          <div style={{ display: 'grid', placeItems: 'center', padding: '3rem' }}>
+          <div className="admin-loading">
             <span className="spinner dark" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="list-empty">
             <h3>Nothing matches this view</h3>
+            <p>
+              {statusFilter === 'pending'
+                ? 'No pending requests right now. Switch to "Any status" to see closed ones.'
+                : 'Try a different type or status filter.'}
+            </p>
           </div>
         ) : (
-          filtered.map((it) => {
-            const isOpen = openId === it.id;
-            if (it.type === 'partner') {
-              const r = it.data;
+          <>
+            <div className="admin-row head">
+              <span>Request</span>
+              <span>From</span>
+              <span>Received</span>
+              <span>Status</span>
+              <span></span>
+            </div>
+            {filtered.map((it) => {
+              const isOpen = openId === it.id;
+
+              if (it.type === 'loan') {
+                const a = it.data;
+                const docCount = applicationDocuments(a).length;
+                return (
+                  <div key={it.id} className={`admin-item ${isOpen ? 'open' : ''}`}>
+                    <div className="admin-row clickable" {...rowProps(it.id)}>
+                      <span>
+                        <div className="admin-row-title">
+                          <span className="badge badge-processing type-badge">Loan</span>
+                          {formatNaira(a.loanAmount)}
+                        </div>
+                        <div className="admin-row-sub">
+                          {a.purposes.join(', ')} · {docCount} doc{docCount === 1 ? '' : 's'}
+                        </div>
+                      </span>
+                      <span>
+                        <div>
+                          {a.surname} {a.firstName}
+                        </div>
+                        <div className="admin-row-sub">{a.email}</div>
+                      </span>
+                      <span>{formatDate(a.createdAt)}</span>
+                      <span>
+                        <StatusBadge status={a.status} />
+                      </span>
+                      <span>
+                        {reviewButton(it.id)}
+                      </span>
+                    </div>
+                    {isOpen && <ApplicationReview key={a._id} application={a} onUpdated={onLoanUpdated} />}
+                  </div>
+                );
+              }
+
+              if (it.type === 'partner') {
+                const r = it.data;
+                const photos: DocumentItem[] = [];
+                if (r.storefrontPhoto) photos.push({ label: 'Store front', file: r.storefrontPhoto });
+                if (r.goodsPhoto) photos.push({ label: 'Goods inside', file: r.goodsPhoto });
+                return (
+                  <div key={it.id} className={`admin-item ${isOpen ? 'open' : ''}`}>
+                    <div className="admin-row clickable" {...rowProps(it.id)}>
+                      <span>
+                        <div className="admin-row-title">
+                          <span className="badge badge-approved type-badge">Partner</span>
+                          {r.businessName}
+                        </div>
+                        <div className="admin-row-sub">
+                          {r.category} · {r.area}
+                        </div>
+                      </span>
+                      <span>
+                        <div>{r.ownerName}</div>
+                        <div className="admin-row-sub">{r.ownerEmail}</div>
+                      </span>
+                      <span>{formatDate(r.createdAt)}</span>
+                      <span>
+                        <span className={`badge ${VENDOR_BADGE[r.status]}`}>{r.status}</span>
+                      </span>
+                      <span>
+                        {reviewButton(it.id)}
+                      </span>
+                    </div>
+
+                    {isOpen && (
+                      <div className="review-panel">
+                        <div className="review-sections">
+                          <section className="review-section">
+                            <h3>Business</h3>
+                            <div className="detail-grid">
+                              <div><strong>Name</strong>{r.businessName}</div>
+                              <div><strong>Category</strong>{r.category}</div>
+                              <div><strong>Area</strong>{r.area}</div>
+                              <div><strong>Business phone</strong>{r.contactPhone || '—'}</div>
+                              <div><strong>CAC registered?</strong>{r.cacRegistered || '—'}</div>
+                              <div className="span-2"><strong>Address</strong>{r.address}</div>
+                            </div>
+                          </section>
+
+                          <section className="review-section">
+                            <h3>Owner</h3>
+                            <div className="detail-grid">
+                              <div><strong>Name</strong>{r.ownerName}</div>
+                              <div><strong>Phone</strong>{r.ownerPhone}</div>
+                              <div className="span-2">
+                                <strong>Email</strong>
+                                <a href={`mailto:${r.ownerEmail}`}>{r.ownerEmail}</a>
+                              </div>
+                            </div>
+                            {r.notes && (
+                              <>
+                                <h3 style={{ marginTop: '1rem' }}>Notes from applicant</h3>
+                                <p className="review-text">{r.notes}</p>
+                              </>
+                            )}
+                          </section>
+
+                          <section className="review-section span-2">
+                            <h3>Photos</h3>
+                            <DocumentList docs={photos} emptyText="No photos were uploaded." />
+                          </section>
+
+                          {r.status === 'approved' && r.approvedVendor && (
+                            <div className="alert alert-success span-2">
+                              Approved · partner code <strong>{r.approvedVendor.partnerCode}</strong>.
+                            </div>
+                          )}
+                          {r.status === 'rejected' && r.adminNote && (
+                            <div className="alert alert-error span-2">
+                              Rejected · <em>"{r.adminNote}"</em>
+                            </div>
+                          )}
+
+                          {r.status === 'pending' && (
+                            <section className="review-section span-2 decision">
+                              <h3>Decision</h3>
+                              <div className="form-group">
+                                <label htmlFor={`note-${it.id}`}>
+                                  Note <span className="label-hint">· required when rejecting</span>
+                                </label>
+                                <textarea
+                                  id={`note-${it.id}`}
+                                  rows={3}
+                                  value={noteDraft[it.id] ?? r.adminNote ?? ''}
+                                  onChange={(e) => setNoteDraft((p) => ({ ...p, [it.id]: e.target.value }))}
+                                />
+                              </div>
+                              <div className="action-bar decision-actions">
+                                <div className="action-group">
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger"
+                                    disabled={actingId === it.id}
+                                    onClick={() => rejectPartner(r)}
+                                  >
+                                    Reject
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-success"
+                                    disabled={actingId === it.id}
+                                    onClick={() => approvePartner(r)}
+                                  >
+                                    {actingId === it.id ? <span className="spinner" /> : 'Approve & create vendor'}
+                                  </button>
+                                </div>
+                              </div>
+                            </section>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // contact
+              const c = it.data;
               return (
-                <div key={it.id}>
-                  <div className="admin-row">
+                <div key={it.id} className={`admin-item ${isOpen ? 'open' : ''}`}>
+                  <div className="admin-row clickable" {...rowProps(it.id)}>
                     <span>
-                      <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        <span className="badge badge-approved">Partner</span>
-                        <strong>{r.businessName}</strong>
+                      <div className="admin-row-title">
+                        <span className="badge badge-received type-badge">Contact</span>
+                        {c.subject || 'Contact enquiry'}
                       </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--gf-muted)' }}>
-                        {r.category} · {r.area}
+                      <div className="admin-row-sub">
+                        {c.message.slice(0, 80)}
+                        {c.message.length > 80 ? '…' : ''}
                       </div>
                     </span>
                     <span>
-                      <div>{r.ownerName}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--gf-muted)' }}>{r.ownerEmail}</div>
+                      <div>{c.name}</div>
+                      <div className="admin-row-sub">{c.email}</div>
                     </span>
-                    <span>{formatDate(r.createdAt)}</span>
-                    <span><span className={`badge ${VENDOR_BADGE[r.status]}`}>{r.status}</span></span>
+                    <span>{formatDate(c.createdAt)}</span>
                     <span>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        onClick={() => setOpenId(isOpen ? null : it.id)}
-                      >
-                        {isOpen ? 'Close' : 'Review'}
-                      </button>
+                      <span className={`badge ${c.status === 'resolved' ? 'badge-approved' : 'badge-processing'}`}>
+                        {c.status}
+                      </span>
+                    </span>
+                    <span>
+                      {reviewButton(it.id)}
                     </span>
                   </div>
 
                   {isOpen && (
-                    <div className="admin-detail">
-                      <h3>Business</h3>
-                      <div className="detail-grid">
-                        <div><strong>Name</strong>{r.businessName}</div>
-                        <div><strong>Category</strong>{r.category}</div>
-                        <div><strong>Area</strong>{r.area}</div>
-                        <div><strong>Business phone</strong>{r.contactPhone || '—'}</div>
-                        <div><strong>CAC registered?</strong>{r.cacRegistered || '—'}</div>
-                        <div style={{ gridColumn: '1 / -1' }}>
-                          <strong>Address</strong>{r.address}
-                        </div>
-                      </div>
-
-                      {(r.storefrontPhoto || r.goodsPhoto) && (
-                        <>
-                          <h3>Photos</h3>
-                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {r.storefrontPhoto && <FileLink label="Store front" file={r.storefrontPhoto} />}
-                            {r.goodsPhoto && <FileLink label="Goods inside" file={r.goodsPhoto} />}
+                    <div className="review-panel">
+                      <div className="review-sections">
+                        <section className="review-section">
+                          <h3>From</h3>
+                          <div className="detail-grid">
+                            <div><strong>Name</strong>{c.name}</div>
+                            <div><strong>Email</strong><a href={`mailto:${c.email}`}>{c.email}</a></div>
+                            <div><strong>Phone</strong>{c.phone || '—'}</div>
+                            <div><strong>Subject</strong>{c.subject || '—'}</div>
                           </div>
-                        </>
-                      )}
+                        </section>
 
-                      <h3>Owner</h3>
-                      <div className="detail-grid">
-                        <div><strong>Name</strong>{r.ownerName}</div>
-                        <div><strong>Phone</strong>{r.ownerPhone}</div>
-                        <div><strong>Email</strong>{r.ownerEmail}</div>
-                      </div>
+                        <section className="review-section">
+                          <h3>Message</h3>
+                          <p className="review-text">{c.message}</p>
+                        </section>
 
-                      {r.notes && (
-                        <>
-                          <h3>Notes from applicant</h3>
-                          <p style={{ marginBottom: '0.5rem' }}>{r.notes}</p>
-                        </>
-                      )}
-
-                      {r.status === 'approved' && r.approvedVendor && (
-                        <div className="alert alert-success">
-                          Approved · partner code <strong>{r.approvedVendor.partnerCode}</strong>.
-                        </div>
-                      )}
-                      {r.status === 'rejected' && r.adminNote && (
-                        <div className="alert alert-error">
-                          Rejected · <em>"{r.adminNote}"</em>
-                        </div>
-                      )}
-
-                      {r.status === 'pending' && (
-                        <>
+                        <section className="review-section span-2 decision">
                           <h3>Decision</h3>
                           <div className="form-group">
-                            <label htmlFor={`note-${it.id}`}>
-                              Note <span style={{ color: 'var(--gf-muted)', fontWeight: 400 }}>· required when rejecting</span>
+                            <label htmlFor={`cnote-${it.id}`}>
+                              Internal note <span className="label-hint">· optional, not shown to the sender</span>
                             </label>
                             <textarea
-                              id={`note-${it.id}`}
-                              value={noteDraft[it.id] ?? r.adminNote ?? ''}
+                              id={`cnote-${it.id}`}
+                              rows={3}
+                              value={noteDraft[it.id] ?? c.adminNote ?? ''}
                               onChange={(e) => setNoteDraft((p) => ({ ...p, [it.id]: e.target.value }))}
                             />
                           </div>
-                          <div className="action-bar">
-                            <button
-                              type="button"
-                              className="btn btn-success"
-                              disabled={actingId === it.id}
-                              onClick={() => approvePartner(r)}
-                            >
-                              {actingId === it.id ? <span className="spinner" /> : 'Approve & create vendor'}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-danger"
-                              disabled={actingId === it.id}
-                              onClick={() => rejectPartner(r)}
-                            >
-                              Reject
-                            </button>
+                          <div className="action-bar decision-actions">
+                            <div className="action-group">
+                              <a href={`mailto:${c.email}`} className="btn btn-secondary">
+                                Reply by email
+                              </a>
+                            </div>
+                            <div className="action-group">
+                              {c.status === 'pending' ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-success"
+                                  disabled={actingId === it.id}
+                                  onClick={() => resolveContact(c)}
+                                >
+                                  {actingId === it.id ? <span className="spinner" /> : 'Mark resolved'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={actingId === it.id}
+                                  onClick={() => reopenContact(c)}
+                                >
+                                  Re-open
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </>
-                      )}
+                        </section>
+                      </div>
                     </div>
                   )}
                 </div>
               );
-            }
-            // contact
-            const c = it.data;
-            return (
-              <div key={it.id}>
-                <div className="admin-row">
-                  <span>
-                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                      <span className="badge badge-received">User</span>
-                      <strong>{c.subject || 'Contact enquiry'}</strong>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gf-muted)' }}>
-                      {c.message.slice(0, 80)}{c.message.length > 80 ? '…' : ''}
-                    </div>
-                  </span>
-                  <span>
-                    <div>{c.name}</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--gf-muted)' }}>{c.email}</div>
-                  </span>
-                  <span>{formatDate(c.createdAt)}</span>
-                  <span>
-                    <span className={`badge ${c.status === 'resolved' ? 'badge-approved' : 'badge-processing'}`}>
-                      {c.status}
-                    </span>
-                  </span>
-                  <span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      onClick={() => setOpenId(isOpen ? null : it.id)}
-                    >
-                      {isOpen ? 'Close' : 'Review'}
-                    </button>
-                  </span>
-                </div>
-
-                {isOpen && (
-                  <div className="admin-detail">
-                    <h3>From</h3>
-                    <div className="detail-grid">
-                      <div><strong>Name</strong>{c.name}</div>
-                      <div><strong>Email</strong><a href={`mailto:${c.email}`}>{c.email}</a></div>
-                      <div><strong>Phone</strong>{c.phone || '—'}</div>
-                      <div><strong>Subject</strong>{c.subject || '—'}</div>
-                    </div>
-
-                    <h3>Message</h3>
-                    <p style={{ whiteSpace: 'pre-wrap', marginBottom: '0.5rem' }}>{c.message}</p>
-
-                    {c.adminNote && (
-                      <>
-                        <h3>Internal note</h3>
-                        <p style={{ marginBottom: '0.5rem', fontStyle: 'italic' }}>{c.adminNote}</p>
-                      </>
-                    )}
-
-                    <h3>Decision</h3>
-                    <div className="form-group">
-                      <label htmlFor={`cnote-${it.id}`}>Internal note (optional)</label>
-                      <textarea
-                        id={`cnote-${it.id}`}
-                        value={noteDraft[it.id] ?? c.adminNote ?? ''}
-                        onChange={(e) => setNoteDraft((p) => ({ ...p, [it.id]: e.target.value }))}
-                      />
-                    </div>
-                    <div className="action-bar">
-                      <a href={`mailto:${c.email}`} className="btn btn-secondary">
-                        Reply by email
-                      </a>
-                      {c.status === 'pending' ? (
-                        <button
-                          type="button"
-                          className="btn btn-success"
-                          disabled={actingId === it.id}
-                          onClick={() => resolveContact(c)}
-                        >
-                          {actingId === it.id ? <span className="spinner" /> : 'Mark resolved'}
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          disabled={actingId === it.id}
-                          onClick={() => reopenContact(c)}
-                        >
-                          Re-open
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
+            })}
+          </>
         )}
       </div>
     </div>

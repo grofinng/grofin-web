@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import toast from 'react-hot-toast';
 import { applicationsApi } from '../api/applications';
 import { extractApiError } from '../api/client';
-import { FileLink } from '../components/FileLink';
-import { Application, ApplicationStatus, PopulatedUserRef, Vendor } from '../types';
+import { Application, ApplicationStatus, PopulatedUserRef } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
-import { DEFAULT_INTEREST_RATE, totalRepayable } from '../utils/loan';
 import { StatusBadge } from '../components/StatusBadge';
-import { emailNotifications } from '../utils/email';
+import { ApplicationReview, applicationDocuments } from '../components/ApplicationReview';
 import { useAuth } from '../context/AuthContext';
 
 type Filter = 'all' | ApplicationStatus;
@@ -20,21 +17,6 @@ export function Admin() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
   const [openId, setOpenId] = useState<string | null>(null);
-  const [actingId, setActingId] = useState<string | null>(null);
-  const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
-  const [allowEditDraft, setAllowEditDraft] = useState<Record<string, boolean>>({});
-  const [repayDraft, setRepayDraft] = useState<
-    Record<string, { bank: string; number: string; name: string }>
-  >({});
-
-  const repayOf = (a: Application) =>
-    repayDraft[a._id] ?? {
-      bank: a.repaymentBank || '',
-      number: a.repaymentAccountNumber || '',
-      name: a.repaymentAccountName || '',
-    };
-  const setRepay = (a: Application, patch: Partial<{ bank: string; number: string; name: string }>) =>
-    setRepayDraft((prev) => ({ ...prev, [a._id]: { ...repayOf(a), ...patch } }));
 
   useEffect(() => {
     let cancelled = false;
@@ -75,67 +57,8 @@ export function Admin() {
     return { totalRequested, approvedTotal };
   }, [apps]);
 
-  const updateStatus = async (a: Application, status: ApplicationStatus) => {
-    const note = (noteDraft[a._id] ?? a.statusNote ?? '').trim();
-    if (status === 'rejected' && !note) {
-      toast.error('A reason is required when rejecting an application.');
-      return;
-    }
-    const allowEdit = status === 'rejected' ? !!allowEditDraft[a._id] : false;
-
-    const repay = repayOf(a);
-    if (status === 'approved') {
-      if (!repay.bank.trim() || !repay.name.trim()) {
-        toast.error('Enter the repayment bank and account name before approving.');
-        return;
-      }
-      if (!/^\d{10}$/.test(repay.number)) {
-        toast.error('The repayment account number must be 10 digits.');
-        return;
-      }
-    }
-
-    setActingId(a._id);
-    try {
-      const updated = await applicationsApi.adminUpdateStatus(a._id, {
-        status,
-        statusNote: note,
-        allowEdit,
-        ...(status === 'approved'
-          ? {
-              repaymentBank: repay.bank.trim(),
-              repaymentAccountNumber: repay.number.trim(),
-              repaymentAccountName: repay.name.trim(),
-            }
-          : {}),
-      });
-      setApps((prev) => prev.map((x) => (x._id === updated._id ? updated : x)));
-      toast.success(`Application ${status}`);
-
-      if (status === 'approved') {
-        emailNotifications.applicationApproved({
-          email: updated.email,
-          firstName: updated.firstName,
-          loanAmount: updated.loanAmount,
-          applicationId: updated._id,
-        });
-      }
-      if (status === 'rejected') {
-        emailNotifications.applicationRejected({
-          email: updated.email,
-          firstName: updated.firstName,
-          loanAmount: updated.loanAmount,
-          applicationId: updated._id,
-          reason: note,
-          canEdit: allowEdit,
-        });
-      }
-    } catch (err) {
-      toast.error(extractApiError(err, 'Could not update status'));
-    } finally {
-      setActingId(null);
-    }
-  };
+  const onUpdated = (updated: Application) =>
+    setApps((prev) => prev.map((x) => (x._id === updated._id ? updated : x)));
 
   return (
     <div className="container page">
@@ -145,7 +68,7 @@ export function Admin() {
           <p>
             {isReadOnly
               ? 'Review every application across the platform. View only — only admins can approve or reject.'
-              : 'Review every application, change status, and approve loans.'}
+              : 'Review every application, read the submitted documents, and approve or reject loans.'}
           </p>
         </div>
       </div>
@@ -157,9 +80,9 @@ export function Admin() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
+      <div className="stat-grid">
         <Stat label="Total applications" value={String(apps.length)} />
-        <Stat label="Pending" value={String(counts.received + counts.processing)} />
+        <Stat label="Awaiting decision" value={String(counts.received + counts.processing)} />
         <Stat label="Total requested" value={formatNaira(totals.totalRequested)} />
         <Stat label="Approved value" value={formatNaira(totals.approvedTotal)} />
       </div>
@@ -173,19 +96,20 @@ export function Admin() {
             onClick={() => setFilter(f)}
           >
             {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
-            <span style={{ marginLeft: 6, opacity: 0.7 }}>· {counts[f]}</span>
+            <span className="filter-count">· {counts[f]}</span>
           </button>
         ))}
       </div>
 
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card admin-list">
         {loading ? (
-          <div style={{ display: 'grid', placeItems: 'center', padding: '3rem' }}>
+          <div className="admin-loading">
             <span className="spinner dark" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="list-empty">
             <h3>No applications match that filter</h3>
+            <p>Try another status above.</p>
           </div>
         ) : (
           <>
@@ -199,29 +123,49 @@ export function Admin() {
             {filtered.map((a) => {
               const isOpen = openId === a._id;
               const userRef =
-                typeof a.user === 'object' && a.user
-                  ? (a.user as PopulatedUserRef)
-                  : null;
+                typeof a.user === 'object' && a.user ? (a.user as PopulatedUserRef) : null;
+              const docCount = applicationDocuments(a).length;
               return (
-                <div key={a._id}>
-                  <div className="admin-row">
+                <div key={a._id} className={`admin-item ${isOpen ? 'open' : ''}`}>
+                  <div
+                    className="admin-row clickable"
+                    onClick={() => setOpenId(isOpen ? null : a._id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setOpenId(isOpen ? null : a._id);
+                      }
+                    }}
+                  >
                     <span>
-                      <div style={{ fontWeight: 600 }}>
+                      <div className="admin-row-title">
                         {a.surname} {a.firstName}
                       </div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--gf-muted)' }}>
+                      <div className="admin-row-sub">
                         {a.email}
                         {userRef && userRef.email !== a.email && ` · acct ${userRef.email}`}
                       </div>
                     </span>
-                    <span style={{ fontWeight: 600 }}>{formatNaira(a.loanAmount)}</span>
+                    <span>
+                      <div className="admin-row-title">{formatNaira(a.loanAmount)}</div>
+                      <div className="admin-row-sub">
+                        {a.purposes.join(', ')} · {docCount} doc{docCount === 1 ? '' : 's'}
+                      </div>
+                    </span>
                     <span>{formatDate(a.createdAt)}</span>
-                    <span><StatusBadge status={a.status} /></span>
+                    <span>
+                      <StatusBadge status={a.status} />
+                    </span>
                     <span>
                       <button
                         type="button"
-                        className="btn btn-ghost"
-                        onClick={() => setOpenId(isOpen ? null : a._id)}
+                        className="btn btn-ghost btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenId(isOpen ? null : a._id);
+                        }}
                       >
                         {isOpen ? 'Close' : 'Review'}
                       </button>
@@ -229,227 +173,12 @@ export function Admin() {
                   </div>
 
                   {isOpen && (
-                    <div className="admin-detail">
-                      <h3>Applicant</h3>
-                      <div className="detail-grid">
-                        <div><strong>Name</strong>{a.surname} {a.firstName} {a.middleName}</div>
-                        <div><strong>Email</strong>{a.email}</div>
-                        <div><strong>Mobile</strong>{a.mobileNumber}{a.altNumber && ` · ${a.altNumber}`}</div>
-                        <div><strong>Address</strong>{a.houseAddress}, {a.lga}, {a.state}{a.country ? `, ${a.country}` : ''}</div>
-                        <div><strong>BVN</strong>{a.bvn}</div>
-                        <div><strong>NIN</strong>{a.nin}</div>
-                      </div>
-
-                      <h3>Employment</h3>
-                      <div className="detail-grid">
-                        <div>
-                          <strong>Status</strong>
-                          {a.employmentStatus === 'not-working' ? 'Not currently working' : 'Employed'}
-                        </div>
-                        {a.employmentStatus === 'not-working' ? (
-                          <>
-                            <div>
-                              <strong>Loan reference</strong>
-                              {a.referenceName || '—'}
-                              {a.referenceRelationship && ` (${a.referenceRelationship})`}
-                            </div>
-                            <div><strong>Reference phone</strong>{a.referencePhone || '—'}</div>
-                            <div><strong>Reference address</strong>{a.referenceAddress || '—'}</div>
-                          </>
-                        ) : (
-                          <>
-                            <div><strong>Employer</strong>{a.employerName}</div>
-                            <div><strong>Office</strong>{a.officeAddress}</div>
-                          </>
-                        )}
-                      </div>
-
-                      <h3>Loan</h3>
-                      <div className="detail-grid">
-                        <div><strong>Amount</strong>{formatNaira(a.loanAmount)}</div>
-                        <div>
-                          <strong>Total to repay</strong>
-                          {formatNaira(totalRepayable(a.loanAmount, a.interestRate ?? DEFAULT_INTEREST_RATE))}
-                        </div>
-                        {a.status === 'approved' && a.approvedAt && (
-                          <div><strong>Approved on</strong>{formatDate(a.approvedAt)}</div>
-                        )}
-                        {a.status === 'approved' && a.dueDate && (
-                          <div><strong>Repayment due</strong>{formatDate(a.dueDate)}</div>
-                        )}
-                        {a.status === 'approved' && a.repaymentAccountNumber && (
-                          <div style={{ gridColumn: '1 / -1' }}>
-                            <strong>Repayment account</strong>
-                            {a.repaymentBank} · {a.repaymentAccountNumber} · {a.repaymentAccountName}
-                          </div>
-                        )}
-                        <div><strong>Purpose</strong>{a.purposes.join(', ')}</div>
-                        {a.purposes.includes('Other') && (
-                          <>
-                            <div><strong>Bank</strong>{a.bankName || '—'}</div>
-                            <div><strong>Account number</strong>{a.accountNumber || '—'}</div>
-                            <div><strong>Account name</strong>{a.accountName || '—'}</div>
-                          </>
-                        )}
-                        {a.purposes.length > 1 && (
-                          <div style={{ gridColumn: '1 / -1' }}>
-                            <strong>Breakdown</strong>
-                            <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1rem' }}>
-                              {a.purposeBreakdown.map((b) => (
-                                <li key={b.purpose}>
-                                  {b.purpose}: <strong>{formatNaira(b.amount)}</strong>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-
-                      <h3>Selected vendors</h3>
-                      {a.vendorSelections && a.vendorSelections.length > 0 ? (
-                        <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.25rem' }}>
-                          {a.vendorSelections.map((s, i) => {
-                            const v = typeof s.vendor === 'object' ? (s.vendor as Vendor) : null;
-                            return (
-                              <li key={`${s.purpose}-${i}`}>
-                                <strong>{s.purpose}</strong> ·{' '}
-                                {v ? (
-                                  <>
-                                    {v.businessName} ({v.partnerCode}) — {v.area}
-                                    {v.contactPhone && ` · ${v.contactPhone}`}
-                                  </>
-                                ) : (
-                                  '—'
-                                )}
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p style={{ marginBottom: '0.5rem', color: 'var(--gf-muted)' }}>None.</p>
-                      )}
-
-                      <h3>Documents</h3>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        {a.validId && <FileLink label="Valid ID" file={a.validId} />}
-                        {a.proofOfAddress && <FileLink label="Proof of address" file={a.proofOfAddress} />}
-                        {a.offerLetter && <FileLink label="Offer letter" file={a.offerLetter} />}
-                        {a.bankStatement && <FileLink label="Bank statement" file={a.bankStatement} />}
-                        {a.staffId && <FileLink label="Staff ID" file={a.staffId} />}
-                      </div>
-
-                      {isReadOnly ? (
-                        a.statusNote && (
-                          <>
-                            <h3>Note</h3>
-                            <p style={{ margin: 0 }}>{a.statusNote}</p>
-                          </>
-                        )
-                      ) : (
-                        <>
-                          <h3>Decision</h3>
-                          <div className="form-group">
-                            <label htmlFor={`note-${a._id}`}>
-                              Note <span style={{ color: 'var(--gf-muted)', fontWeight: 400 }}>· required when rejecting</span>
-                            </label>
-                            <textarea
-                              id={`note-${a._id}`}
-                              value={noteDraft[a._id] ?? a.statusNote ?? ''}
-                              onChange={(e) =>
-                                setNoteDraft((prev) => ({ ...prev, [a._id]: e.target.value }))
-                              }
-                              placeholder="Visible to the applicant. For rejections, explain what they can fix."
-                            />
-                          </div>
-
-                          <div className="form-group">
-                            <label htmlFor={`repay-bank-${a._id}`}>
-                              Repayment account{' '}
-                              <span style={{ color: 'var(--gf-muted)', fontWeight: 400 }}>
-                                · required to approve — the customer repays into this account
-                              </span>
-                            </label>
-                            <div className="form-row-3">
-                              <input
-                                id={`repay-bank-${a._id}`}
-                                placeholder="Bank name"
-                                value={repayOf(a).bank}
-                                onChange={(e) => setRepay(a, { bank: e.target.value })}
-                              />
-                              <input
-                                aria-label="Repayment account number"
-                                placeholder="Account number (10 digits)"
-                                inputMode="numeric"
-                                maxLength={10}
-                                value={repayOf(a).number}
-                                onChange={(e) =>
-                                  setRepay(a, { number: e.target.value.replace(/\D/g, '').slice(0, 10) })
-                                }
-                              />
-                              <input
-                                aria-label="Repayment account name"
-                                placeholder="Account name"
-                                value={repayOf(a).name}
-                                onChange={(e) => setRepay(a, { name: e.target.value })}
-                              />
-                            </div>
-                          </div>
-
-                          <div className="form-group">
-                            <label className={`checkbox-row ${(allowEditDraft[a._id] ?? a.allowEdit) ? 'checked' : ''}`}>
-                              <input
-                                type="checkbox"
-                                checked={allowEditDraft[a._id] ?? !!a.allowEdit}
-                                onChange={(e) =>
-                                  setAllowEditDraft((prev) => ({
-                                    ...prev,
-                                    [a._id]: e.target.checked,
-                                  }))
-                                }
-                              />
-                              <span>
-                                Allow the applicant to edit and resubmit this application (only applies on Reject)
-                              </span>
-                            </label>
-                          </div>
-
-                          <div className="action-bar">
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={actingId === a._id || a.status === 'received'}
-                              onClick={() => updateStatus(a, 'received')}
-                            >
-                              Mark received
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              disabled={actingId === a._id || a.status === 'processing'}
-                              onClick={() => updateStatus(a, 'processing')}
-                            >
-                              Mark processing
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-success"
-                              disabled={actingId === a._id || a.status === 'approved'}
-                              onClick={() => updateStatus(a, 'approved')}
-                            >
-                              {actingId === a._id ? <span className="spinner" /> : 'Approve'}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-danger"
-                              disabled={actingId === a._id || a.status === 'rejected'}
-                              onClick={() => updateStatus(a, 'rejected')}
-                            >
-                              Reject
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                    <ApplicationReview
+                      key={a._id}
+                      application={a}
+                      readOnly={isReadOnly}
+                      onUpdated={onUpdated}
+                    />
                   )}
                 </div>
               );
@@ -463,12 +192,9 @@ export function Admin() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card" style={{ padding: '1.25rem' }}>
-      <div style={{ fontSize: '0.78rem', color: 'var(--gf-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.4rem' }}>
-        {label}
-      </div>
-      <div style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--gf-green-900)' }}>{value}</div>
+    <div className="card stat-card">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value">{value}</div>
     </div>
   );
 }
-
