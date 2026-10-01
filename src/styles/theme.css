@@ -1181,9 +1181,17 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
 .loan-figure.total { background: var(--gf-green-900); }
 .loan-figure.total > span { color: #b9dcc7; }
 .loan-figure.total > strong { color: #fff; font-size: 1.15rem; }
+.loan-figure.late { background: #fdecea; }
+.loan-figure.late > span { color: #9b3a30; }
+.loan-figure.late > strong { color: var(--gf-danger); }
+.late-policy { margin-top: -0.35rem; }
+.text-danger { color: var(--gf-danger) !important; }
 @media (max-width: 560px) {
   .loan-figures { grid-template-columns: minmax(0, 1fr); }
   .loan-figure + .loan-figure { border-left: 0; border-top: 1px solid var(--gf-border); }
+}
+@media (min-width: 561px) {
+  .loan-figures:has(.late) { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 .loan-purposes > strong {
   display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
@@ -1660,6 +1668,7 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
   color: var(--gf-danger);
   font-weight: 600;
 }
+.repay-policy { font-size: 0.8rem; color: var(--gf-muted); margin-top: 0.35rem; }
 
 /* Searchable combobox (Apply form long lists) */
 .search-select { position: relative; min-width: 0; }

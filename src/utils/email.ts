@@ -67,9 +67,15 @@ export const emailNotifications = {
     repaymentBank: string;
     repaymentAccountNumber: string;
     repaymentAccountName: string;
+    graceDays: number;
+    lateRate: number;
   }) => {
     const due = to.dueDate ? formatDate(to.dueDate) : '29 days from approval';
     const ref = formatRef(to.applicationId);
+    const dailyLate = Math.round((to.totalRepayable * to.lateRate) / 100);
+    const latePolicy =
+      `If payment is more than ${to.graceDays} day${to.graceDays === 1 ? '' : 's'} late, ` +
+      `${to.lateRate}% of the total repayable (₦${dailyLate.toLocaleString()}) is added for every extra day.`;
     const accountDetails =
       `Bank: ${to.repaymentBank}\n` +
       `Account number: ${to.repaymentAccountNumber}\n` +
@@ -88,10 +94,14 @@ export const emailNotifications = {
       repayment_account_number: to.repaymentAccountNumber,
       repayment_account_name: to.repaymentAccountName,
       account_details: accountDetails,
+      grace_days: String(to.graceDays),
+      late_interest_rate: String(to.lateRate),
+      daily_late_interest: dailyLate.toLocaleString(),
+      late_policy: latePolicy,
       message:
         `Great news ${to.firstName}! Your Esena Africa loan request of ₦${to.loanAmount.toLocaleString()} (ref ${ref}) has been approved.\n\n` +
         `Please repay ₦${to.totalRepayable.toLocaleString()} by ${due} into:\n${accountDetails}\n\n` +
-        `Quote ref ${ref} when you pay. ${CONTACT_LINE}`,
+        `${latePolicy}\n\nQuote ref ${ref} when you pay. ${CONTACT_LINE}`,
     });
   },
 

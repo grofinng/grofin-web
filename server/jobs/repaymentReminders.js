@@ -1,7 +1,7 @@
 const Application = require('../models/Application');
 const { sendEmail, TEMPLATES, COMPANY_PHONE } = require('../utils/email');
 
-const DEFAULT_INTEREST_RATE = 20;
+const { repaymentBreakdown, daysUntil } = require('../utils/loan');
 
 // Schedule: warn N days before the due date (default: 2 days out), on the
 // due date itself, then every INTERVAL days after it while unpaid (default:
@@ -21,21 +21,6 @@ function parseDays(raw, fallback) {
 function parseInterval(raw, fallback) {
   const n = parseInt(String(raw || ''), 10);
   return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function startOfDay(d) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
-}
-
-/** Whole days from `now` to `due`: positive = days left, 0 = due today, negative = overdue. */
-function daysUntil(due, now) {
-  return Math.round((startOfDay(due) - startOfDay(now)) / 86400000);
-}
-
-function totalRepayable(principal, rate = DEFAULT_INTEREST_RATE) {
-  return principal + Math.round((principal * rate) / 100);
 }
 
 function formatDate(d) {
@@ -62,8 +47,12 @@ function alreadySent(app, r) {
   return (app.reminderLog || []).some((e) => e.kind === r.kind && e.offsetDays === r.offsetDays);
 }
 
-function buildParams(app, days) {
-  const total = totalRepayable(app.loanAmount, app.interestRate ?? DEFAULT_INTEREST_RATE);
+function latePolicy(b) {
+  return `If payment is more than ${b.graceDays} day${b.graceDays === 1 ? '' : 's'} late, ${b.lateRate}% of the total repayable (${fmtNaira(b.dailyLate)}) is added for every extra day.`;
+}
+
+function buildParams(app, days, now) {
+  const b = repaymentBreakdown(app, now);
   const due = formatDate(app.dueDate);
   const accountDetails =
     `Bank: ${app.repaymentBank}\n` +
@@ -73,6 +62,11 @@ function buildParams(app, days) {
   const n = Math.abs(days);
   const when =
     days === 0 ? 'today' : overdue ? `${n} day${n === 1 ? '' : 's'} ago` : `in ${n} day${n === 1 ? '' : 's'}`;
+  const statusLine = overdue
+    ? `Overdue by ${n} day${n === 1 ? '' : 's'}`
+    : days === 0
+    ? 'Due today'
+    : `Due in ${n} day${n === 1 ? '' : 's'}`;
   const ref = shortRef(app._id);
   const contact = `Quote ref ${ref} when you pay. Questions? Call or WhatsApp ${COMPANY_PHONE} or reply to this email.`;
   const subject = overdue
@@ -80,15 +74,20 @@ function buildParams(app, days) {
     : days === 0
     ? `Esena Africa — Loan ${ref} repayment is due today`
     : `Esena Africa — Loan ${ref} repayment is due ${when}`;
-  const message = overdue
-    ? `Hi ${app.firstName}, your Esena Africa loan repayment of ${fmtNaira(total)} (ref ${ref}) was due on ${due} (${when}) and we have no record of it yet. Please pay into:\n${accountDetails}\n\nIf you have already paid, reply to this email with your proof of payment. ${contact}`
-    : `Hi ${app.firstName}, a reminder that your Esena Africa loan repayment of ${fmtNaira(total)} (ref ${ref}) is due ${when} (${due}). Please pay into:\n${accountDetails}\n\n${contact}`;
 
-  const statusLine = overdue
-    ? `Overdue by ${n} day${n === 1 ? '' : 's'}`
-    : days === 0
-    ? 'Due today'
-    : `Due in ${n} day${n === 1 ? '' : 's'}`;
+  let lateLine;
+  if (b.lateInterest > 0) {
+    lateLine = `Late interest of ${fmtNaira(b.lateInterest)} (${b.penaltyDays} day${b.penaltyDays === 1 ? '' : 's'} at ${b.lateRate}% daily) has been added, so the amount due is now ${fmtNaira(b.amountDue)} and grows by ${fmtNaira(b.dailyLate)} each day.`;
+  } else if (b.inGrace) {
+    const left = b.graceDays - b.daysOverdue;
+    lateLine = `You are in the ${b.graceDays}-day grace period: pay within ${left} day${left === 1 ? '' : 's'} to avoid ${b.lateRate}% daily late interest (${fmtNaira(b.dailyLate)} per day).`;
+  } else {
+    lateLine = latePolicy(b);
+  }
+
+  const message = overdue
+    ? `Hi ${app.firstName}, your Esena Africa loan repayment of ${fmtNaira(b.total)} (ref ${ref}) was due on ${due} (${when}) and we have no record of it yet. ${lateLine}\n\nPlease pay ${fmtNaira(b.amountDue)} into:\n${accountDetails}\n\nIf you have already paid, reply to this email with your proof of payment. ${contact}`
+    : `Hi ${app.firstName}, a reminder that your Esena Africa loan repayment of ${fmtNaira(b.total)} (ref ${ref}) is due ${when} (${due}). ${lateLine}\n\nPlease pay into:\n${accountDetails}\n\n${contact}`;
 
   return {
     to_email: app.email,
@@ -98,7 +97,13 @@ function buildParams(app, days) {
     reminder_kind: overdue ? 'overdue' : days === 0 ? 'due-today' : 'due-soon',
     status_line: statusLine,
     loan_amount: app.loanAmount.toLocaleString('en-NG'),
-    total_repayable: total.toLocaleString('en-NG'),
+    total_repayable: b.total.toLocaleString('en-NG'),
+    late_interest: b.lateInterest.toLocaleString('en-NG'),
+    late_days: String(b.penaltyDays),
+    daily_late_interest: b.dailyLate.toLocaleString('en-NG'),
+    amount_due: b.amountDue.toLocaleString('en-NG'),
+    grace_days: String(b.graceDays),
+    late_policy: latePolicy(b),
     due_date: due,
     due_in: when,
     days_left: overdue ? '0' : String(n),
@@ -122,7 +127,7 @@ async function runRepaymentReminders({ now = new Date(), dryRun = false } = {}) 
     status: 'approved',
     repaidAt: null,
     dueDate: { $ne: null },
-  }).select('firstName email loanAmount interestRate dueDate repaymentBank repaymentAccountNumber repaymentAccountName reminderLog');
+  }).select('firstName email loanAmount interestRate lateGraceDays lateInterestRate dueDate repaidAt repaymentBank repaymentAccountNumber repaymentAccountName reminderLog');
 
   const summary = { checked: apps.length, dryRun, sent: [], skipped: 0, failed: [] };
 
@@ -140,7 +145,7 @@ async function runRepaymentReminders({ now = new Date(), dryRun = false } = {}) 
       continue;
     }
     try {
-      const result = await sendEmail(templateId, buildParams(app, days));
+      const result = await sendEmail(templateId, buildParams(app, days, now));
       if (result.skipped) {
         summary.failed.push({ ...entry, error: 'EmailJS not configured on the server' });
         continue;

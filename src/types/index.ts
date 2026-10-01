@@ -129,6 +129,8 @@ export interface Application {
   statusNote?: string;
   allowEdit?: boolean;
   interestRate?: number;
+  lateGraceDays?: number;
+  lateInterestRate?: number;
   approvedAt?: string | null;
   dueDate?: string | null;
   repaymentBank?: string;

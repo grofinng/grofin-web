@@ -4,7 +4,7 @@ import { applicationsApi } from '../api/applications';
 import { extractApiError } from '../api/client';
 import { Application, ApplicationStatus, PopulatedUserRef, Vendor } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
-import { DEFAULT_INTEREST_RATE, daysUntil, interestOn, totalRepayable } from '../utils/loan';
+import { DEFAULT_INTEREST_RATE, RepaymentBreakdown, interestOn, repaymentBreakdown, totalRepayable } from '../utils/loan';
 import { saveRepaymentAccount, useRepaymentAccount } from '../hooks/useRepaymentAccount';
 import { emailNotifications } from '../utils/email';
 import { RepaymentBadge, StatusBadge } from './StatusBadge';
@@ -94,6 +94,7 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
 
   const userRef = typeof a.user === 'object' && a.user ? (a.user as PopulatedUserRef) : null;
   const rate = a.interestRate ?? DEFAULT_INTEREST_RATE;
+  const breakdown = repaymentBreakdown(a);
   const docs = applicationDocuments(a);
   const paysToApplicant = a.purposes.includes('Other');
   const otherAmount = a.purposeBreakdown.find((b) => b.purpose === 'Other')?.amount;
@@ -156,6 +157,8 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
           repaymentBank: updated.repaymentBank || repay.bank.trim(),
           repaymentAccountNumber: updated.repaymentAccountNumber || repay.number.trim(),
           repaymentAccountName: updated.repaymentAccountName || repay.name.trim(),
+          graceDays: updated.lateGraceDays ?? breakdown.graceDays,
+          lateRate: updated.lateInterestRate ?? breakdown.lateRate,
         });
       }
       if (status === 'rejected') {
@@ -192,8 +195,10 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
           <strong>{formatNaira(a.loanAmount)}</strong>
         </div>
         <div className="review-summary-item">
-          <span>To repay</span>
-          <strong>{formatNaira(totalRepayable(a.loanAmount, rate))}</strong>
+          <span>{breakdown.lateInterest > 0 ? 'Due now' : 'To repay'}</span>
+          <strong className={breakdown.lateInterest > 0 ? 'text-danger' : undefined}>
+            {formatNaira(breakdown.amountDue)}
+          </strong>
         </div>
         <div className="review-summary-item">
           <span>Submitted</span>
@@ -301,11 +306,22 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
               <span>Interest · {rate}%</span>
               <strong>{formatNaira(interestOn(a.loanAmount, rate))}</strong>
             </div>
+            {breakdown.lateInterest > 0 && (
+              <div className="loan-figure late">
+                <span>Late interest · {breakdown.penaltyDays}d × {breakdown.lateRate}%</span>
+                <strong>{formatNaira(breakdown.lateInterest)}</strong>
+              </div>
+            )}
             <div className="loan-figure total">
-              <span>Total to repay</span>
-              <strong>{formatNaira(totalRepayable(a.loanAmount, rate))}</strong>
+              <span>{breakdown.lateInterest > 0 ? 'Due now' : 'Total to repay'}</span>
+              <strong>{formatNaira(breakdown.amountDue)}</strong>
             </div>
           </div>
+          <p className="review-hint late-policy">
+            {breakdown.graceDays}-day grace after the due date, then {breakdown.lateRate}% of{' '}
+            {formatNaira(breakdown.total)} ({formatNaira(breakdown.dailyLate)}) added per day.
+            {a.repaidAt && breakdown.lateInterest > 0 && ' Frozen at the repaid date.'}
+          </p>
 
           <div className="loan-purposes">
             <strong>Purpose</strong>
@@ -343,7 +359,7 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
                     <strong>{formatDate(a.repaidAt)}</strong>
                   </div>
                 ) : (
-                  a.dueDate && <DueChip dueDate={a.dueDate} />
+                  a.dueDate && <DueChip b={breakdown} />
                 )}
               </div>
               {a.repaidNote && <div className="detail-sub">Note: {a.repaidNote}</div>}
@@ -462,8 +478,9 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
                 ) : (
                   <>
                     <p className="review-hint">
-                      Once the customer pays {formatNaira(totalRepayable(a.loanAmount, rate))}, record it here to stop
-                      the due-date and overdue reminder emails.
+                      Once the customer pays {formatNaira(breakdown.amountDue)}
+                      {breakdown.lateInterest > 0 && ` (includes ${formatNaira(breakdown.lateInterest)} late interest)`},
+                      record it here to stop the due-date and overdue reminder emails.
                     </p>
                     <div className="form-row">
                       <div className="form-group">
@@ -627,14 +644,26 @@ function AccountCard({
   );
 }
 
-function DueChip({ dueDate }: { dueDate: string }) {
-  const days = daysUntil(dueDate);
+function DueChip({ b }: { b: RepaymentBreakdown }) {
+  const days = b.days ?? 0;
   if (days < 0) {
-    return <span className="badge badge-rejected due-chip">{Math.abs(days)} day{Math.abs(days) === 1 ? '' : 's'} overdue</span>;
+    const n = -days;
+    if (b.inGrace) {
+      return (
+        <span className="badge badge-processing due-chip">
+          {n} day{n === 1 ? '' : 's'} overdue · grace ({b.graceDays - n} left)
+        </span>
+      );
+    }
+    return (
+      <span className="badge badge-rejected due-chip">
+        {n} day{n === 1 ? '' : 's'} overdue · +{formatNaira(b.dailyLate)}/day
+      </span>
+    );
   }
   if (days === 0) return <span className="badge badge-processing due-chip">Due today</span>;
   return (
-    <span className={`badge ${days <= 5 ? 'badge-processing' : 'badge-approved'} due-chip`}>
+    <span className={`badge ${days <= 2 ? 'badge-processing' : 'badge-approved'} due-chip`}>
       {days} day{days === 1 ? '' : 's'} left
     </span>
   );

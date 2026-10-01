@@ -6,7 +6,7 @@ import { extractApiError } from '../api/client';
 import { formatDate, formatNaira } from '../utils/format';
 import { RepaymentBadge, StatusBadge } from '../components/StatusBadge';
 import { RepaymentBanner } from '../components/RepaymentBanner';
-import { DEFAULT_INTEREST_RATE, daysUntil, totalRepayable } from '../utils/loan';
+import { repaymentBreakdown } from '../utils/loan';
 
 const STATUS_PIPELINE: ApplicationStatus[] = ['received', 'processing', 'approved'];
 
@@ -132,9 +132,9 @@ function ApplicationCard({ application: a }: { application: Application }) {
   const next = NEXT_COPY[a.status];
   const isRejected = a.status === 'rejected';
   const canEdit = isRejected && !!a.allowEdit;
-  const rate = a.interestRate ?? DEFAULT_INTEREST_RATE;
-  const repayTotal = totalRepayable(a.loanAmount, rate);
-  const daysLeft = a.dueDate && !a.repaidAt ? daysUntil(a.dueDate) : null;
+  const b = repaymentBreakdown(a);
+  const repayTotal = b.total;
+  const daysLeft = a.dueDate && !a.repaidAt ? b.days : null;
   const isRepaid = a.status === 'approved' && !!a.repaidAt;
 
   return (
@@ -214,7 +214,26 @@ function ApplicationCard({ application: a }: { application: Application }) {
             <div className="repay-box-rows">
               <span>Borrowed <strong>{formatNaira(a.loanAmount)}</strong></span>
               <span>Total to repay <strong>{formatNaira(repayTotal)}</strong></span>
+              {b.lateInterest > 0 && (
+                <span className="repay-overdue">
+                  Late interest <strong>{formatNaira(b.lateInterest)}</strong>
+                </span>
+              )}
+              {b.lateInterest > 0 && (
+                <span className="repay-overdue">
+                  {isRepaid ? 'Paid' : 'Due now'} <strong>{formatNaira(b.amountDue)}</strong>
+                </span>
+              )}
             </div>
+            {!isRepaid && (
+              <div className="repay-policy">
+                {b.inGrace
+                  ? `Grace period: pay within ${b.graceDays - b.daysOverdue} day${b.graceDays - b.daysOverdue === 1 ? '' : 's'} to avoid ${b.lateRate}% daily late interest (${formatNaira(b.dailyLate)} per day).`
+                  : b.lateInterest > 0
+                  ? `${formatNaira(b.dailyLate)} is added every further day until you pay.`
+                  : `${b.graceDays}-day grace after the due date, then ${b.lateRate}% of the total (${formatNaira(b.dailyLate)}) is added per day.`}
+              </div>
+            )}
             {isRepaid && (
               <div>
                 <span className="badge badge-repaid">Repaid</span> on <strong>{formatDate(a.repaidAt as string)}</strong>

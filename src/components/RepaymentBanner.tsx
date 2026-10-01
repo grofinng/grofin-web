@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Application } from '../types';
-import { formatDate, formatNaira } from '../utils/format';
+import { formatDate, formatNaira, formatRef } from '../utils/format';
 import { dueLoans } from '../utils/loan';
 
 interface Props {
@@ -39,12 +39,19 @@ export function RepaymentBanner({ applications, showLink = true }: Props) {
       <div className="repay-banner-body">
         <strong>{title}</strong>
         <ul className="repay-banner-list">
-          {due.map(({ application: a, days, total }) => (
+          {due.map(({ application: a, days, breakdown: b }) => (
             <li key={a._id}>
               <span>
-                <strong>{formatNaira(total)}</strong> {whenText(days)}
+                <strong>{formatNaira(b.amountDue)}</strong> {whenText(days)}
                 {a.dueDate && ` (${formatDate(a.dueDate)})`}
-                {' · '}ref {a._id.slice(-8).toUpperCase()}
+                {' · '}ref {formatRef(a._id)}
+              </span>
+              <span className="repay-banner-account">
+                {b.lateInterest > 0
+                  ? `Includes ${formatNaira(b.lateInterest)} late interest · ${formatNaira(b.dailyLate)} more each day`
+                  : b.inGrace
+                  ? `Grace period: ${b.graceDays - b.daysOverdue} day${b.graceDays - b.daysOverdue === 1 ? '' : 's'} left before ${b.lateRate}% daily late interest (${formatNaira(b.dailyLate)}/day)`
+                  : `${b.graceDays}-day grace after the due date, then ${formatNaira(b.dailyLate)} added per day`}
               </span>
               {a.repaymentAccountNumber && (
                 <span className="repay-banner-account">

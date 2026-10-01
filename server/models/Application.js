@@ -48,6 +48,10 @@ const applicationSchema = new mongoose.Schema(
     nin: { type: String, required: true, trim: true, match: [/^\d{11}$/, 'NIN must be 11 digits'] },
     loanAmount: { type: Number, required: true, min: 1 },
     interestRate: { type: Number, default: 20, min: 0 },
+    // Late repayment: no charge for `lateGraceDays` after the due date, then
+    // `lateInterestRate` % of the total repayable is added for every further day.
+    lateGraceDays: { type: Number, default: 3, min: 0 },
+    lateInterestRate: { type: Number, default: 1, min: 0 },
     purposes: {
       type: [String],
       enum: PURPOSES,
