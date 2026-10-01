@@ -1,5 +1,5 @@
 const Application = require('../models/Application');
-const { sendEmail, TEMPLATES } = require('../utils/email');
+const { sendEmail, TEMPLATES, COMPANY_PHONE } = require('../utils/email');
 
 const DEFAULT_INTEREST_RATE = 20;
 
@@ -42,6 +42,10 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('en-NG', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
+function shortRef(id) {
+  return String(id).slice(-8).toUpperCase();
+}
+
 function fmtNaira(n) {
   return `₦${Number(n || 0).toLocaleString('en-NG')}`;
 }
@@ -69,14 +73,16 @@ function buildParams(app, days) {
   const n = Math.abs(days);
   const when =
     days === 0 ? 'today' : overdue ? `${n} day${n === 1 ? '' : 's'} ago` : `in ${n} day${n === 1 ? '' : 's'}`;
+  const ref = shortRef(app._id);
+  const contact = `Quote ref ${ref} when you pay. Questions? Call or WhatsApp ${COMPANY_PHONE} or reply to this email.`;
   const subject = overdue
-    ? `Esena Africa — Your loan repayment is ${n} day${n === 1 ? '' : 's'} overdue`
+    ? `Esena Africa — Loan ${ref} repayment is ${n} day${n === 1 ? '' : 's'} overdue`
     : days === 0
-    ? 'Esena Africa — Your loan repayment is due today'
-    : `Esena Africa — Your loan repayment is due ${when}`;
+    ? `Esena Africa — Loan ${ref} repayment is due today`
+    : `Esena Africa — Loan ${ref} repayment is due ${when}`;
   const message = overdue
-    ? `Hi ${app.firstName}, your Esena Africa loan repayment of ${fmtNaira(total)} was due on ${due} (${when}) and we have no record of it yet. Please pay into:\n${accountDetails}\n\nIf you have already paid, reply to this email with your proof of payment.`
-    : `Hi ${app.firstName}, a reminder that your Esena Africa loan repayment of ${fmtNaira(total)} is due ${when} (${due}). Please pay into:\n${accountDetails}`;
+    ? `Hi ${app.firstName}, your Esena Africa loan repayment of ${fmtNaira(total)} (ref ${ref}) was due on ${due} (${when}) and we have no record of it yet. Please pay into:\n${accountDetails}\n\nIf you have already paid, reply to this email with your proof of payment. ${contact}`
+    : `Hi ${app.firstName}, a reminder that your Esena Africa loan repayment of ${fmtNaira(total)} (ref ${ref}) is due ${when} (${due}). Please pay into:\n${accountDetails}\n\n${contact}`;
 
   const statusLine = overdue
     ? `Overdue by ${n} day${n === 1 ? '' : 's'}`
@@ -87,7 +93,8 @@ function buildParams(app, days) {
   return {
     to_email: app.email,
     to_name: app.firstName,
-    reference: String(app._id),
+    reference: ref,
+    application_id: String(app._id),
     reminder_kind: overdue ? 'overdue' : days === 0 ? 'due-today' : 'due-soon',
     status_line: statusLine,
     loan_amount: app.loanAmount.toLocaleString('en-NG'),

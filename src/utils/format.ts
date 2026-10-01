@@ -15,3 +15,8 @@ export function formatDate(iso: string): string {
     return iso;
   }
 }
+
+/** Short, human-friendly loan reference shown in the app and in emails. */
+export function formatRef(id: string): string {
+  return (id || '').slice(-8).toUpperCase();
+}

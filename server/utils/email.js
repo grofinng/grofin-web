@@ -5,6 +5,7 @@ const SERVICE_ID = process.env.EMAILJS_SERVICE_ID || '';
 const PUBLIC_KEY = process.env.EMAILJS_PUBLIC_KEY || '';
 const PRIVATE_KEY = process.env.EMAILJS_PRIVATE_KEY || '';
 const COMPANY_EMAIL = process.env.ESENA_EMAIL || 'grofinng@gmail.com';
+const COMPANY_PHONE = process.env.ESENA_PHONE || '+234 901 244 1292';
 
 // One template covers every reminder: the job varies {{subject}}, {{message}},
 // {{reminder_kind}} and the day counts. Set EMAILJS_TEMPLATE_OVERDUE only if
@@ -33,7 +34,13 @@ async function sendEmail(templateId, params) {
       user_id: PUBLIC_KEY,
       accessToken: PRIVATE_KEY,
       // Templates greet with either {{name}} or {{to_name}}.
-      template_params: { name: params.to_name, from_email: COMPANY_EMAIL, ...params },
+      template_params: {
+        name: params.to_name,
+        from_email: COMPANY_EMAIL,
+        support_email: COMPANY_EMAIL,
+        support_phone: COMPANY_PHONE,
+        ...params,
+      },
     }),
   });
   if (!res.ok) {
@@ -43,4 +50,4 @@ async function sendEmail(templateId, params) {
   return { skipped: false };
 }
 
-module.exports = { sendEmail, isConfigured, TEMPLATES, COMPANY_EMAIL };
+module.exports = { sendEmail, isConfigured, TEMPLATES, COMPANY_EMAIL, COMPANY_PHONE };
