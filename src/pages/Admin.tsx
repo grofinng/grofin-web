@@ -4,12 +4,14 @@ import { applicationsApi } from '../api/applications';
 import { extractApiError } from '../api/client';
 import { Application, ApplicationStatus, PopulatedUserRef } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
-import { StatusBadge } from '../components/StatusBadge';
+import { RepaymentBadge, StatusBadge, repaymentState } from '../components/StatusBadge';
 import { ApplicationReview, applicationDocuments } from '../components/ApplicationReview';
 import { useAuth } from '../context/AuthContext';
 import { saveRepaymentAccount, useRepaymentAccount } from '../hooks/useRepaymentAccount';
 
-type Filter = 'all' | ApplicationStatus;
+type Filter = 'all' | ApplicationStatus | 'overdue' | 'repaid';
+
+const FILTERS: Filter[] = ['all', 'received', 'processing', 'approved', 'overdue', 'repaid', 'rejected'];
 
 export function Admin() {
   const { user } = useAuth();
@@ -32,10 +34,11 @@ export function Admin() {
     };
   }, []);
 
-  const filtered = useMemo(
-    () => (filter === 'all' ? apps : apps.filter((a) => a.status === filter)),
-    [apps, filter]
-  );
+  const filtered = useMemo(() => {
+    if (filter === 'all') return apps;
+    if (filter === 'overdue' || filter === 'repaid') return apps.filter((a) => repaymentState(a) === filter);
+    return apps.filter((a) => a.status === filter);
+  }, [apps, filter]);
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = {
@@ -44,12 +47,36 @@ export function Admin() {
       processing: 0,
       approved: 0,
       rejected: 0,
+      overdue: 0,
+      repaid: 0,
     };
     apps.forEach((a) => {
       c[a.status]++;
+      const r = repaymentState(a);
+      if (r) c[r]++;
     });
     return c;
   }, [apps]);
+
+  const [runningReminders, setRunningReminders] = useState(false);
+  const runReminders = async () => {
+    setRunningReminders(true);
+    try {
+      const r = await applicationsApi.adminRunReminders();
+      const parts = [`${r.sent.length} sent`, `${r.skipped} not due`];
+      if (r.failed.length) parts.push(`${r.failed.length} failed`);
+      (r.failed.length ? toast.error : toast.success)(`Reminders: ${parts.join(' · ')}`, { duration: 6000 });
+      if (r.failed.length) console.error('[reminders] failures', r.failed);
+      if (r.sent.length) {
+        const list = await applicationsApi.adminListAll();
+        setApps(list);
+      }
+    } catch (err) {
+      toast.error(extractApiError(err, 'Could not run reminders'));
+    } finally {
+      setRunningReminders(false);
+    }
+  };
 
   const totals = useMemo(() => {
     const totalRequested = apps.reduce((sum, a) => sum + a.loanAmount, 0);
@@ -73,6 +100,17 @@ export function Admin() {
               : 'Review every application, read the submitted documents, and approve or reject loans.'}
           </p>
         </div>
+        {!isReadOnly && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={runningReminders}
+            title="Reminders also run automatically every morning"
+            onClick={runReminders}
+          >
+            {runningReminders ? <span className="spinner dark" /> : 'Send due reminders now'}
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -92,7 +130,7 @@ export function Admin() {
       {!isReadOnly && <RepaymentAccountCard />}
 
       <div className="admin-toolbar">
-        {(['all', 'received', 'processing', 'approved', 'rejected'] as Filter[]).map((f) => (
+        {FILTERS.map((f) => (
           <button
             key={f}
             type="button"
@@ -159,8 +197,9 @@ export function Admin() {
                       </div>
                     </span>
                     <span>{formatDate(a.createdAt)}</span>
-                    <span>
+                    <span className="badge-row">
                       <StatusBadge status={a.status} />
+                      <RepaymentBadge application={a} />
                     </span>
                     <span>
                       <button

@@ -18,3 +18,33 @@ services:
         value: 7d
       - key: CLIENT_URL
         sync: false
+      - key: EMAILJS_SERVICE_ID
+        sync: false
+      - key: EMAILJS_PUBLIC_KEY
+        sync: false
+      - key: EMAILJS_PRIVATE_KEY
+        sync: false
+      - key: EMAILJS_TEMPLATE_REMINDER
+        sync: false
+
+  # Daily 08:00 UTC (09:00 WAT): due-soon and overdue repayment reminders.
+  - type: cron
+    name: esena-africa-repayment-reminders
+    runtime: node
+    rootDir: server
+    schedule: "0 8 * * *"
+    buildCommand: npm install
+    startCommand: npm run reminders
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: MONGODB_URI
+        sync: false
+      - key: EMAILJS_SERVICE_ID
+        sync: false
+      - key: EMAILJS_PUBLIC_KEY
+        sync: false
+      - key: EMAILJS_PRIVATE_KEY
+        sync: false
+      - key: EMAILJS_TEMPLATE_REMINDER
+        sync: false

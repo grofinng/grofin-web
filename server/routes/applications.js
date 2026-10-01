@@ -260,12 +260,41 @@ router.patch('/admin/:id/status', protect, requireAdmin, async (req, res, next) 
         repaymentBank: '',
         repaymentAccountNumber: '',
         repaymentAccountName: '',
+        repaidAt: null,
+        repaidNote: '',
       });
     }
     const updated = await Application.findByIdAndUpdate(req.params.id, update, { new: true })
       .populate('user', 'firstName surname email')
       .populate('vendorSelections.vendor', 'businessName partnerCode area category address');
     if (!updated) return res.status(404).json({ message: 'Application not found' });
+    res.json({ application: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Admin — record (or clear) that an approved loan has been repaid.
+router.patch('/admin/:id/repayment', protect, requireAdmin, async (req, res, next) => {
+  try {
+    const { repaid, repaidAt, note } = req.body;
+    const existing = await Application.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: 'Application not found' });
+    if (existing.status !== 'approved') {
+      return res.status(400).json({ message: 'Only approved loans can be marked as repaid' });
+    }
+    let update;
+    if (repaid) {
+      const when = repaidAt ? new Date(repaidAt) : new Date();
+      if (Number.isNaN(when.getTime())) return res.status(400).json({ message: 'Invalid repayment date' });
+      if (when > new Date()) return res.status(400).json({ message: 'Repayment date cannot be in the future' });
+      update = { repaidAt: when, repaidNote: String(note || '').trim() };
+    } else {
+      update = { repaidAt: null, repaidNote: '' };
+    }
+    const updated = await Application.findByIdAndUpdate(req.params.id, update, { new: true })
+      .populate('user', 'firstName surname email')
+      .populate('vendorSelections.vendor', 'businessName partnerCode area category address');
     res.json({ application: updated });
   } catch (err) {
     next(err);

@@ -170,6 +170,24 @@ const applicationSchema = new mongoose.Schema(
     repaymentBank: { type: String, trim: true, default: '' },
     repaymentAccountNumber: { type: String, trim: true, default: '' },
     repaymentAccountName: { type: String, trim: true, default: '' },
+
+    // Repayment tracking. `repaidAt` set by an admin stops reminder emails.
+    repaidAt: { type: Date, default: null },
+    repaidNote: { type: String, trim: true, default: '' },
+    // One entry per reminder email sent, so the daily job never repeats one.
+    reminderLog: {
+      type: [
+        new mongoose.Schema(
+          {
+            kind: { type: String, enum: ['due-soon', 'due-today', 'overdue'], required: true },
+            offsetDays: { type: Number, required: true },
+            sentAt: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
   },
   { timestamps: true, collection: 'applications' }
 );

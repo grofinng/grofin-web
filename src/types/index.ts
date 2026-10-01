@@ -134,8 +134,29 @@ export interface Application {
   repaymentBank?: string;
   repaymentAccountNumber?: string;
   repaymentAccountName?: string;
+  /** Set by an admin once the loan is repaid; stops reminder emails. */
+  repaidAt?: string | null;
+  repaidNote?: string;
+  reminderLog?: ReminderLogEntry[];
   createdAt: string;
   updatedAt: string;
+}
+
+export type ReminderKind = 'due-soon' | 'due-today' | 'overdue';
+
+export interface ReminderLogEntry {
+  kind: ReminderKind;
+  offsetDays: number;
+  sentAt: string;
+}
+
+export interface ReminderRunSummary {
+  checked: number;
+  dryRun: boolean;
+  sent: { id: string; email: string; kind: ReminderKind; offsetDays: number; days: number }[];
+  skipped: number;
+  failed: { id: string; email: string; kind: ReminderKind; error: string }[];
+  schedule: { daysBefore: number[]; overdueEveryDays: number };
 }
 
 export interface ApiError {

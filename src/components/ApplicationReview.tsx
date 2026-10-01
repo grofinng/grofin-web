@@ -7,7 +7,7 @@ import { formatDate, formatNaira } from '../utils/format';
 import { DEFAULT_INTEREST_RATE, daysUntil, interestOn, totalRepayable } from '../utils/loan';
 import { saveRepaymentAccount, useRepaymentAccount } from '../hooks/useRepaymentAccount';
 import { emailNotifications } from '../utils/email';
-import { StatusBadge } from './StatusBadge';
+import { RepaymentBadge, StatusBadge } from './StatusBadge';
 import { DocumentItem, DocumentList } from './DocumentViewer';
 import { SensitiveValue } from './SensitiveValue';
 
@@ -55,6 +55,25 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
   });
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [acting, setActing] = useState<ApplicationStatus | null>(null);
+  const [repaidDraft, setRepaidDraft] = useState({ date: new Date().toISOString().slice(0, 10), note: '' });
+  const [savingRepaid, setSavingRepaid] = useState(false);
+
+  const setRepaid = async (repaid: boolean) => {
+    setSavingRepaid(true);
+    try {
+      const updated = await applicationsApi.adminSetRepaid(a._id, {
+        repaid,
+        repaidAt: repaid ? repaidDraft.date : undefined,
+        note: repaid ? repaidDraft.note.trim() : undefined,
+      });
+      onUpdated?.(updated);
+      toast.success(repaid ? 'Loan marked as repaid — reminders stopped' : 'Repayment record cleared');
+    } catch (err) {
+      toast.error(extractApiError(err, 'Could not update repayment'));
+    } finally {
+      setSavingRepaid(false);
+    }
+  };
 
   // Pre-fill the repayment account from the saved default unless this loan
   // already has one. Admins can still override it for a single loan.
@@ -163,7 +182,10 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
       <div className="review-summary">
         <div className="review-summary-item">
           <span>Status</span>
-          <StatusBadge status={a.status} />
+          <span className="badge-row">
+            <StatusBadge status={a.status} />
+            <RepaymentBadge application={a} />
+          </span>
         </div>
         <div className="review-summary-item">
           <span>Requested</span>
@@ -315,8 +337,32 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
                   <span>Due</span>
                   <strong>{a.dueDate ? formatDate(a.dueDate) : '—'}</strong>
                 </div>
-                {a.dueDate && <DueChip dueDate={a.dueDate} />}
+                {a.repaidAt ? (
+                  <div>
+                    <span>Repaid</span>
+                    <strong>{formatDate(a.repaidAt)}</strong>
+                  </div>
+                ) : (
+                  a.dueDate && <DueChip dueDate={a.dueDate} />
+                )}
               </div>
+              {a.repaidNote && <div className="detail-sub">Note: {a.repaidNote}</div>}
+              {!a.repaidAt && (
+                <div className="reminder-log">
+                  <strong>Reminder emails</strong>
+                  {a.reminderLog && a.reminderLog.length > 0 ? (
+                    <ul>
+                      {a.reminderLog.map((r, i) => (
+                        <li key={i}>
+                          {reminderLabel(r.kind, r.offsetDays)} · sent {formatDate(r.sentAt)}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="detail-sub">None sent yet.</span>
+                  )}
+                </div>
+              )}
               {a.repaymentAccountNumber && (
                 <AccountCard
                   heading="Repays into"
@@ -394,6 +440,64 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
                 rows={3}
               />
             </div>
+
+            {a.status === 'approved' && (
+              <div className="decision-block repayment-block">
+                <h4>Repayment</h4>
+                {a.repaidAt ? (
+                  <>
+                    <p className="review-hint">
+                      Recorded as repaid on <strong>{formatDate(a.repaidAt)}</strong>. No further reminder emails will
+                      be sent.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={savingRepaid || busy}
+                      onClick={() => setRepaid(false)}
+                    >
+                      {savingRepaid ? <span className="spinner dark" /> : 'Undo — not repaid'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="review-hint">
+                      Once the customer pays {formatNaira(totalRepayable(a.loanAmount, rate))}, record it here to stop
+                      the due-date and overdue reminder emails.
+                    </p>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label htmlFor={`repaid-date-${a._id}`}>Date repaid</label>
+                        <input
+                          id={`repaid-date-${a._id}`}
+                          type="date"
+                          max={new Date().toISOString().slice(0, 10)}
+                          value={repaidDraft.date}
+                          onChange={(e) => setRepaidDraft((d) => ({ ...d, date: e.target.value }))}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor={`repaid-note-${a._id}`}>Note (optional)</label>
+                        <input
+                          id={`repaid-note-${a._id}`}
+                          placeholder="e.g. Transfer ref 12345"
+                          value={repaidDraft.note}
+                          onChange={(e) => setRepaidDraft((d) => ({ ...d, note: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      disabled={savingRepaid || busy || !repaidDraft.date}
+                      onClick={() => setRepaid(true)}
+                    >
+                      {savingRepaid ? <span className="spinner" /> : 'Mark as repaid'}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="decision-columns">
               <div className="decision-block">
@@ -534,4 +638,10 @@ function DueChip({ dueDate }: { dueDate: string }) {
       {days} day{days === 1 ? '' : 's'} left
     </span>
   );
+}
+
+function reminderLabel(kind: 'due-soon' | 'due-today' | 'overdue', offsetDays: number) {
+  if (kind === 'due-today') return 'Due today';
+  if (kind === 'due-soon') return `Due in ${offsetDays} day${offsetDays === 1 ? '' : 's'}`;
+  return `${offsetDays} day${offsetDays === 1 ? '' : 's'} overdue`;
 }

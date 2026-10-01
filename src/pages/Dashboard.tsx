@@ -5,7 +5,8 @@ import { applicationsApi } from '../api/applications';
 import { Application } from '../types';
 import { extractApiError } from '../api/client';
 import { formatNaira, formatDate } from '../utils/format';
-import { StatusBadge } from '../components/StatusBadge';
+import { RepaymentBadge, StatusBadge } from '../components/StatusBadge';
+import { RepaymentBanner } from '../components/RepaymentBanner';
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -45,6 +46,7 @@ export function Dashboard() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {!loading && <RepaymentBanner applications={apps} />}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
         <Stat label="Applications" value={String(apps.length)} />
@@ -88,7 +90,12 @@ export function Dashboard() {
                   <td>{formatDate(a.createdAt)}</td>
                   <td>{formatNaira(a.loanAmount)}</td>
                   <td>{a.purposes.join(', ')}</td>
-                  <td><StatusBadge status={a.status} /></td>
+                  <td>
+                    <span className="badge-row">
+                      <StatusBadge status={a.status} />
+                      <RepaymentBadge application={a} />
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

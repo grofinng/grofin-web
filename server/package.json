@@ -8,7 +8,9 @@
     "dev": "nodemon server.js",
     "seed:admin": "node scripts/seedAdmin.js",
     "seed:vendors": "node scripts/seedVendors.js",
-    "seed:stats": "node scripts/seedImpactStats.js"
+    "seed:stats": "node scripts/seedImpactStats.js",
+    "reminders": "node scripts/sendRepaymentReminders.js",
+    "reminders:dry": "node scripts/sendRepaymentReminders.js --dry-run"
   },
   "dependencies": {
     "@vercel/blob": "^2.6.1",

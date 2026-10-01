@@ -1,5 +1,5 @@
 import { api } from './client';
-import { Application, ApplicationStatus } from '../types';
+import { Application, ApplicationStatus, ReminderRunSummary } from '../types';
 
 export const applicationsApi = {
   create: (formData: FormData) =>
@@ -36,4 +36,12 @@ export const applicationsApi = {
     api
       .patch<{ application: Application }>(`/applications/admin/${id}/status`, payload)
       .then((r) => r.data.application),
+  adminSetRepaid: (id: string, payload: { repaid: boolean; repaidAt?: string; note?: string }) =>
+    api
+      .patch<{ application: Application }>(`/applications/admin/${id}/repayment`, payload)
+      .then((r) => r.data.application),
+  adminRunReminders: (dryRun = false) =>
+    api
+      .post<ReminderRunSummary>(`/jobs/repayment-reminders${dryRun ? '?dryRun=1' : ''}`)
+      .then((r) => r.data),
 };

@@ -4,7 +4,8 @@ import { applicationsApi } from '../api/applications';
 import { Application, ApplicationStatus, Vendor } from '../types';
 import { extractApiError } from '../api/client';
 import { formatDate, formatNaira } from '../utils/format';
-import { StatusBadge } from '../components/StatusBadge';
+import { RepaymentBadge, StatusBadge } from '../components/StatusBadge';
+import { RepaymentBanner } from '../components/RepaymentBanner';
 import { DEFAULT_INTEREST_RATE, daysUntil, totalRepayable } from '../utils/loan';
 
 const STATUS_PIPELINE: ApplicationStatus[] = ['received', 'processing', 'approved'];
@@ -79,6 +80,8 @@ export function Applications() {
 
       {error && <div className="alert alert-error">{error}</div>}
 
+      {!loading && <RepaymentBanner applications={apps} showLink={false} />}
+
       {!loading && apps.length > 0 && (
         <div className="admin-toolbar">
           {(['all', 'received', 'processing', 'approved', 'rejected'] as Filter[]).map((f) => (
@@ -131,7 +134,8 @@ function ApplicationCard({ application: a }: { application: Application }) {
   const canEdit = isRejected && !!a.allowEdit;
   const rate = a.interestRate ?? DEFAULT_INTEREST_RATE;
   const repayTotal = totalRepayable(a.loanAmount, rate);
-  const daysLeft = a.dueDate ? daysUntil(a.dueDate) : null;
+  const daysLeft = a.dueDate && !a.repaidAt ? daysUntil(a.dueDate) : null;
+  const isRepaid = a.status === 'approved' && !!a.repaidAt;
 
   return (
     <article className={`app-card status-${a.status}`}>
@@ -142,7 +146,10 @@ function ApplicationCard({ application: a }: { application: Application }) {
             <div className="app-card-amount">{formatNaira(a.loanAmount)}</div>
             <div className="app-card-ref">Ref · {a._id.slice(-8).toUpperCase()}</div>
           </div>
-          <StatusBadge status={a.status} />
+          <span className="badge-row">
+            <StatusBadge status={a.status} />
+            <RepaymentBadge application={a} />
+          </span>
         </header>
 
         <div className="app-card-purposes">
@@ -208,7 +215,12 @@ function ApplicationCard({ application: a }: { application: Application }) {
               <span>Borrowed <strong>{formatNaira(a.loanAmount)}</strong></span>
               <span>Total to repay <strong>{formatNaira(repayTotal)}</strong></span>
             </div>
-            {a.dueDate && (
+            {isRepaid && (
+              <div>
+                <span className="badge badge-repaid">Repaid</span> on <strong>{formatDate(a.repaidAt as string)}</strong>
+              </div>
+            )}
+            {a.dueDate && !isRepaid && (
               <div>
                 Due <strong>{formatDate(a.dueDate)}</strong>
                 {daysLeft != null && (
@@ -219,7 +231,7 @@ function ApplicationCard({ application: a }: { application: Application }) {
                 )}
               </div>
             )}
-            {a.repaymentAccountNumber && (
+            {a.repaymentAccountNumber && !isRepaid && (
               <div>
                 Pay into <strong>{a.repaymentBank}</strong> · <strong>{a.repaymentAccountNumber}</strong>{' '}
                 ({a.repaymentAccountName})
@@ -229,7 +241,15 @@ function ApplicationCard({ application: a }: { application: Application }) {
         )}
 
         <div className="app-card-next">
-          <strong>{next.title}.</strong> {next.body}
+          {isRepaid ? (
+            <>
+              <strong>Repaid.</strong> Thank you — this loan was settled on {formatDate(a.repaidAt as string)}.
+            </>
+          ) : (
+            <>
+              <strong>{next.title}.</strong> {next.body}
+            </>
+          )}
           {a.statusNote && (
             <div style={{ marginTop: '0.4rem', fontStyle: 'italic' }}>
               <strong>Reason:</strong> “{a.statusNote}”
