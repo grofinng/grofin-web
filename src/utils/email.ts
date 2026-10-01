@@ -5,7 +5,7 @@ const PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || '';
 const TEMPLATES = {
   registration: process.env.REACT_APP_EMAILJS_TEMPLATE_REGISTRATION || '',
   received: process.env.REACT_APP_EMAILJS_TEMPLATE_RECEIVED || '',
-  approved: process.env.REACT_APP_EMAILJS_TEMPLATE_APPROVED || '',
+  approved: process.env.EMAILJS_TEMPLATE_APPROVED || '',
   rejected: process.env.REACT_APP_EMAILJS_TEMPLATE_REJECTED || '',
   adminReceived: process.env.REACT_APP_EMAILJS_TEMPLATE_ADMIN_RECEIVED || '',
   contact: process.env.REACT_APP_EMAILJS_TEMPLATE_CONTACT || '',
