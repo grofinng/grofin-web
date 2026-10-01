@@ -1,11 +1,12 @@
 import emailjs from '@emailjs/browser';
+import { formatDate } from './format';
 
 const SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || '';
 const PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || '';
 const TEMPLATES = {
   registration: process.env.REACT_APP_EMAILJS_TEMPLATE_REGISTRATION || '',
   received: process.env.REACT_APP_EMAILJS_TEMPLATE_RECEIVED || '',
-  approved: process.env.EMAILJS_TEMPLATE_APPROVED || '',
+  approved: process.env.REACT_APP_EMAILJS_TEMPLATE_APPROVED || '',
   rejected: process.env.REACT_APP_EMAILJS_TEMPLATE_REJECTED || '',
   adminReceived: process.env.REACT_APP_EMAILJS_TEMPLATE_ADMIN_RECEIVED || '',
   contact: process.env.REACT_APP_EMAILJS_TEMPLATE_CONTACT || '',
@@ -53,16 +54,40 @@ export const emailNotifications = {
       message: `Hi ${to.firstName}, we've received your loan application for ₦${to.loanAmount.toLocaleString()} (ref ${to.applicationId}). It is now being processed.`,
     }),
 
-  applicationApproved: (to: { email: string; firstName: string; loanAmount: number; applicationId: string }) =>
-    send(TEMPLATES.approved, {
+  applicationApproved: (to: {
+    email: string;
+    firstName: string;
+    loanAmount: number;
+    applicationId: string;
+    totalRepayable: number;
+    dueDate?: string | null;
+    repaymentBank: string;
+    repaymentAccountNumber: string;
+    repaymentAccountName: string;
+  }) => {
+    const due = to.dueDate ? formatDate(to.dueDate) : '29 days from approval';
+    const accountDetails =
+      `Bank: ${to.repaymentBank}\n` +
+      `Account number: ${to.repaymentAccountNumber}\n` +
+      `Account name: ${to.repaymentAccountName}`;
+    return send(TEMPLATES.approved, {
       to_email: to.email,
       to_name: to.firstName,
       from_email: COMPANY_EMAIL,
       subject: 'Esena Africa — Application approved',
       reference: to.applicationId,
       loan_amount: to.loanAmount.toLocaleString(),
-      message: `Great news ${to.firstName}! Your Esena Africa application (ref ${to.applicationId}) for ₦${to.loanAmount.toLocaleString()} has been approved.`,
-    }),
+      total_repayable: to.totalRepayable.toLocaleString(),
+      due_date: due,
+      repayment_bank: to.repaymentBank,
+      repayment_account_number: to.repaymentAccountNumber,
+      repayment_account_name: to.repaymentAccountName,
+      account_details: accountDetails,
+      message:
+        `Great news ${to.firstName}! Your Esena Africa application (ref ${to.applicationId}) for ₦${to.loanAmount.toLocaleString()} has been approved.\n\n` +
+        `Please repay ₦${to.totalRepayable.toLocaleString()} by ${due} into:\n${accountDetails}`,
+    });
+  },
 
   applicationRejected: (to: {
     email: string;

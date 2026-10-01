@@ -193,3 +193,13 @@ export interface VendorRequest {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Account customers repay approved loans into. Admin-editable, stored in settings. */
+export interface RepaymentAccount {
+  bank: string;
+  accountNumber: string;
+  accountName: string;
+  updatedAt: string | null;
+  /** True when no admin has saved one yet and the server returned its built-in default. */
+  isFallback: boolean;
+}

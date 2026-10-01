@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import { applicationsApi } from '../api/applications';
 import { extractApiError } from '../api/client';
 import { Application, ApplicationStatus, PopulatedUserRef } from '../types';
@@ -6,6 +7,7 @@ import { formatDate, formatNaira } from '../utils/format';
 import { StatusBadge } from '../components/StatusBadge';
 import { ApplicationReview, applicationDocuments } from '../components/ApplicationReview';
 import { useAuth } from '../context/AuthContext';
+import { saveRepaymentAccount, useRepaymentAccount } from '../hooks/useRepaymentAccount';
 
 type Filter = 'all' | ApplicationStatus;
 
@@ -86,6 +88,8 @@ export function Admin() {
         <Stat label="Total requested" value={formatNaira(totals.totalRequested)} />
         <Stat label="Approved value" value={formatNaira(totals.approvedTotal)} />
       </div>
+
+      {!isReadOnly && <RepaymentAccountCard />}
 
       <div className="admin-toolbar">
         {(['all', 'received', 'processing', 'approved', 'rejected'] as Filter[]).map((f) => (
@@ -195,6 +199,129 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="card stat-card">
       <div className="stat-label">{label}</div>
       <div className="stat-value">{value}</div>
+    </div>
+  );
+}
+
+/**
+ * Admin-editable default repayment account. Pre-fills the approval form and
+ * is sent to customers in the approval email.
+ */
+function RepaymentAccountCard() {
+  const { account, loading, error } = useRepaymentAccount();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState({ bank: '', accountNumber: '', accountName: '' });
+
+  const startEdit = () => {
+    if (!account) return;
+    setDraft({ bank: account.bank, accountNumber: account.accountNumber, accountName: account.accountName });
+    setEditing(true);
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!draft.bank.trim() || !draft.accountName.trim()) {
+      toast.error('Enter the bank and account name.');
+      return;
+    }
+    if (!/^\d{10}$/.test(draft.accountNumber)) {
+      toast.error('The account number must be 10 digits.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveRepaymentAccount({
+        bank: draft.bank.trim(),
+        accountNumber: draft.accountNumber.trim(),
+        accountName: draft.accountName.trim(),
+      });
+      toast.success('Default repayment account saved');
+      setEditing(false);
+    } catch (err) {
+      toast.error(extractApiError(err, 'Could not save the repayment account'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="card settings-card">
+      <div className="settings-card-head">
+        <div>
+          <h3>Default repayment account</h3>
+          <p>
+            Pre-filled when approving a loan and sent to the customer in the approval email.
+            {account?.updatedAt
+              ? ` Last updated ${formatDate(account.updatedAt)}.`
+              : account?.isFallback
+              ? ' Not saved yet — showing the built-in default.'
+              : ''}
+          </p>
+        </div>
+        {!editing && account && (
+          <button type="button" className="btn btn-secondary btn-sm" onClick={startEdit}>
+            Edit
+          </button>
+        )}
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+      {loading && <span className="spinner dark" />}
+
+      {account && !editing && (
+        <div className="account-card settings-account">
+          <div className="account-card-bank">{account.bank}</div>
+          <div className="account-card-number mono">{account.accountNumber}</div>
+          <div className="account-card-name">{account.accountName}</div>
+        </div>
+      )}
+
+      {editing && (
+        <form onSubmit={submit} className="settings-form">
+          <div className="form-row-3">
+            <div className="form-group">
+              <label htmlFor="default-repay-bank">Bank</label>
+              <input
+                id="default-repay-bank"
+                value={draft.bank}
+                placeholder="e.g. Kuda MFB"
+                onChange={(e) => setDraft((d) => ({ ...d, bank: e.target.value }))}
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="default-repay-number">Account number</label>
+              <input
+                id="default-repay-number"
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="10 digits"
+                value={draft.accountNumber}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, accountNumber: e.target.value.replace(/\D/g, '').slice(0, 10) }))
+                }
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="default-repay-name">Account name</label>
+              <input
+                id="default-repay-name"
+                placeholder="Account name"
+                value={draft.accountName}
+                onChange={(e) => setDraft((d) => ({ ...d, accountName: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="action-group">
+            <button type="submit" className="btn btn-sm" disabled={saving}>
+              {saving ? <span className="spinner" /> : 'Save default'}
+            </button>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={() => setEditing(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }

@@ -1135,6 +1135,93 @@ table.simple th { color: var(--gf-muted); font-weight: 600; font-size: 0.78rem; 
 .detail-grid > div > strong { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-muted); margin-bottom: 0.1rem; }
 @media (max-width: 560px) { .detail-grid { grid-template-columns: minmax(0, 1fr); } }
 
+/* Sensitive identifiers (BVN, NIN) — masked until the eye is clicked */
+.sensitive { display: inline-flex; align-items: center; gap: 0.4rem; }
+.sensitive-value.masked { letter-spacing: 0.12em; color: var(--gf-muted); }
+.sensitive-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; padding: 0;
+  border: 1px solid var(--gf-border); border-radius: 6px;
+  background: #fff; color: var(--gf-green-700); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.sensitive-toggle:hover { background: var(--gf-green-100); border-color: var(--gf-leaf); }
+.sensitive-toggle:focus-visible { outline: 2px solid var(--gf-green-500); outline-offset: 1px; }
+
+/* Loan section */
+.loan-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--gf-border);
+  border-radius: var(--gf-radius-sm);
+  overflow: hidden;
+  margin-bottom: 0.9rem;
+}
+.loan-figure { padding: 0.7rem 0.85rem; background: #f7faf8; min-width: 0; }
+.loan-figure + .loan-figure { border-left: 1px solid var(--gf-border); }
+.loan-figure > span {
+  display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gf-muted); margin-bottom: 0.2rem;
+}
+.loan-figure > strong { font-size: 1.05rem; color: var(--gf-ink); font-variant-numeric: tabular-nums; }
+.loan-figure.total { background: var(--gf-green-900); }
+.loan-figure.total > span { color: #b9dcc7; }
+.loan-figure.total > strong { color: #fff; font-size: 1.15rem; }
+@media (max-width: 560px) {
+  .loan-figures { grid-template-columns: minmax(0, 1fr); }
+  .loan-figure + .loan-figure { border-left: 0; border-top: 1px solid var(--gf-border); }
+}
+.loan-purposes > strong {
+  display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gf-muted); margin-bottom: 0.1rem;
+}
+.loan-schedule {
+  margin-top: 0.9rem; padding-top: 0.9rem;
+  border-top: 1px dashed var(--gf-border);
+  display: grid; gap: 0.75rem;
+}
+.loan-schedule-dates { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; align-items: flex-end; }
+.loan-schedule-dates > div > span {
+  display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--gf-muted); margin-bottom: 0.1rem;
+}
+.loan-schedule-dates > div > strong { font-size: 0.95rem; }
+.due-chip { align-self: center; }
+.review-subhead { margin-top: 0.9rem !important; }
+
+/* Bank account "card" */
+.account-card {
+  position: relative;
+  padding: 0.9rem 1rem 0.85rem;
+  border-radius: var(--gf-radius-sm);
+  background: linear-gradient(135deg, #f1f8f3 0%, #e6f4ec 100%);
+  border: 1px solid #cfe6d8;
+  overflow: hidden;
+}
+.account-card::after {
+  content: ''; position: absolute; right: -28px; top: -28px;
+  width: 96px; height: 96px; border-radius: 50%;
+  background: rgba(54, 169, 103, 0.12); pointer-events: none;
+}
+.account-card-heading { font-size: 0.72rem; color: var(--gf-muted); margin-bottom: 0.45rem; }
+.account-card-bank {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+  font-weight: 700; color: var(--gf-green-700);
+}
+.account-card-number {
+  font-size: 1.35rem; font-weight: 700; color: var(--gf-green-900);
+  letter-spacing: 0.12em; margin: 0.15rem 0 0.2rem; overflow-wrap: anywhere;
+}
+.account-card-name { font-size: 0.9rem; color: var(--gf-ink); }
+
+/* Admin settings card */
+.settings-card { padding: 1.1rem 1.25rem 1.25rem; margin-bottom: 1.25rem; }
+.settings-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.85rem; }
+.settings-card-head h3 { font-size: 1rem; margin-bottom: 0.2rem; }
+.settings-card-head p { margin: 0; font-size: 0.85rem; }
+.settings-account { max-width: 360px; }
+.settings-form .form-group { margin-bottom: 0.85rem; }
+
 .decision-columns {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem;
 }

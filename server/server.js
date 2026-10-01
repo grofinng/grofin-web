@@ -11,6 +11,7 @@ const vendorRequestRoutes = require('./routes/vendorRequests');
 const contactRequestRoutes = require('./routes/contactRequests');
 const impactStatRoutes = require('./routes/impactStats');
 const bankRoutes = require('./routes/banks');
+const settingRoutes = require('./routes/settings');
 
 const app = express();
 
@@ -37,6 +38,7 @@ app.use('/api/vendor-requests', vendorRequestRoutes);
 app.use('/api/contact-requests', contactRequestRoutes);
 app.use('/api/impact-stats', impactStatRoutes);
 app.use('/api/banks', bankRoutes);
+app.use('/api/settings', settingRoutes);
 app.use('/api/files', require('./routes/files'));
 
 app.use((err, _req, res, _next) => {

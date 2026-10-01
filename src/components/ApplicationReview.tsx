@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { applicationsApi } from '../api/applications';
 import { extractApiError } from '../api/client';
 import { Application, ApplicationStatus, PopulatedUserRef, Vendor } from '../types';
 import { formatDate, formatNaira } from '../utils/format';
-import { DEFAULT_INTEREST_RATE, totalRepayable } from '../utils/loan';
+import { DEFAULT_INTEREST_RATE, daysUntil, interestOn, totalRepayable } from '../utils/loan';
+import { saveRepaymentAccount, useRepaymentAccount } from '../hooks/useRepaymentAccount';
 import { emailNotifications } from '../utils/email';
 import { StatusBadge } from './StatusBadge';
 import { DocumentItem, DocumentList } from './DocumentViewer';
+import { SensitiveValue } from './SensitiveValue';
 
 interface Props {
   application: Application;
@@ -51,7 +53,25 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
     number: a.repaymentAccountNumber || '',
     name: a.repaymentAccountName || '',
   });
+  const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [acting, setActing] = useState<ApplicationStatus | null>(null);
+
+  // Pre-fill the repayment account from the saved default unless this loan
+  // already has one. Admins can still override it for a single loan.
+  const { account: defaultAccount } = useRepaymentAccount(!readOnly);
+  useEffect(() => {
+    if (!defaultAccount) return;
+    setRepay((r) =>
+      r.bank || r.number || r.name
+        ? r
+        : { bank: defaultAccount.bank, number: defaultAccount.accountNumber, name: defaultAccount.accountName }
+    );
+  }, [defaultAccount]);
+  const differsFromDefault =
+    !!defaultAccount &&
+    (repay.bank.trim() !== defaultAccount.bank ||
+      repay.number.trim() !== defaultAccount.accountNumber ||
+      repay.name.trim() !== defaultAccount.accountName);
 
   const userRef = typeof a.user === 'object' && a.user ? (a.user as PopulatedUserRef) : null;
   const rate = a.interestRate ?? DEFAULT_INTEREST_RATE;
@@ -93,12 +113,30 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
       onUpdated?.(updated);
       toast.success(`Application ${status}`);
 
+      if (status === 'approved' && saveAsDefault && differsFromDefault) {
+        saveRepaymentAccount({
+          bank: repay.bank.trim(),
+          accountNumber: repay.number.trim(),
+          accountName: repay.name.trim(),
+        })
+          .then(() => {
+            toast.success('Saved as the default repayment account');
+            setSaveAsDefault(false);
+          })
+          .catch((err) => toast.error(extractApiError(err, 'Could not save default account')));
+      }
+
       if (status === 'approved') {
         emailNotifications.applicationApproved({
           email: updated.email,
           firstName: updated.firstName,
           loanAmount: updated.loanAmount,
           applicationId: updated._id,
+          totalRepayable: totalRepayable(updated.loanAmount, updated.interestRate ?? rate),
+          dueDate: updated.dueDate,
+          repaymentBank: updated.repaymentBank || repay.bank.trim(),
+          repaymentAccountNumber: updated.repaymentAccountNumber || repay.number.trim(),
+          repaymentAccountName: updated.repaymentAccountName || repay.name.trim(),
         });
       }
       if (status === 'rejected') {
@@ -183,11 +221,11 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
             </div>
             <div>
               <strong>BVN</strong>
-              <span className="mono">{a.bvn}</span>
+              <SensitiveValue value={a.bvn} label="BVN" />
             </div>
             <div>
               <strong>NIN</strong>
-              <span className="mono">{a.nin}</span>
+              <SensitiveValue value={a.nin} label="NIN" />
             </div>
           </div>
         </section>
@@ -230,81 +268,84 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
           </div>
         </section>
 
-        <section className="review-section">
+        <section className="review-section loan-section">
           <h3>Loan</h3>
-          <div className="detail-grid">
-            <div>
-              <strong>Amount</strong>
-              {formatNaira(a.loanAmount)}
+          <div className="loan-figures">
+            <div className="loan-figure">
+              <span>Requested</span>
+              <strong>{formatNaira(a.loanAmount)}</strong>
             </div>
-            <div>
-              <strong>Total to repay</strong>
-              {formatNaira(totalRepayable(a.loanAmount, rate))}
-              <div className="detail-sub">{rate}% interest</div>
+            <div className="loan-figure">
+              <span>Interest · {rate}%</span>
+              <strong>{formatNaira(interestOn(a.loanAmount, rate))}</strong>
             </div>
-            <div className="span-2">
-              <strong>Purpose</strong>
-              {a.purposes.length > 1 ? (
-                <ul className="review-list">
-                  {a.purposeBreakdown.map((b) => (
-                    <li key={b.purpose}>
-                      <span>{b.purpose}</span>
-                      <strong>{formatNaira(b.amount)}</strong>
-                    </li>
-                  ))}
-                </ul>
+            <div className="loan-figure total">
+              <span>Total to repay</span>
+              <strong>{formatNaira(totalRepayable(a.loanAmount, rate))}</strong>
+            </div>
+          </div>
+
+          <div className="loan-purposes">
+            <strong>Purpose</strong>
+            <ul className="review-list">
+              {a.purposeBreakdown.length > 0 ? (
+                a.purposeBreakdown.map((b) => (
+                  <li key={b.purpose}>
+                    <span>{b.purpose}</span>
+                    <strong>{formatNaira(b.amount)}</strong>
+                  </li>
+                ))
               ) : (
-                a.purposes.join(', ')
+                <li>
+                  <span>{a.purposes.join(', ') || '—'}</span>
+                  <strong>{formatNaira(a.loanAmount)}</strong>
+                </li>
+              )}
+            </ul>
+          </div>
+
+          {a.status === 'approved' && (
+            <div className="loan-schedule">
+              <div className="loan-schedule-dates">
+                <div>
+                  <span>Approved</span>
+                  <strong>{a.approvedAt ? formatDate(a.approvedAt) : '—'}</strong>
+                </div>
+                <div>
+                  <span>Due</span>
+                  <strong>{a.dueDate ? formatDate(a.dueDate) : '—'}</strong>
+                </div>
+                {a.dueDate && <DueChip dueDate={a.dueDate} />}
+              </div>
+              {a.repaymentAccountNumber && (
+                <AccountCard
+                  heading="Repays into"
+                  bank={a.repaymentBank}
+                  number={a.repaymentAccountNumber}
+                  name={a.repaymentAccountName}
+                />
               )}
             </div>
-            {a.status === 'approved' && (
-              <>
-                <div>
-                  <strong>Approved on</strong>
-                  {a.approvedAt ? formatDate(a.approvedAt) : '—'}
-                </div>
-                <div>
-                  <strong>Repayment due</strong>
-                  {a.dueDate ? formatDate(a.dueDate) : '—'}
-                </div>
-                {a.repaymentAccountNumber && (
-                  <div className="span-2">
-                    <strong>Repayment account</strong>
-                    {a.repaymentBank} · <span className="mono">{a.repaymentAccountNumber}</span> ·{' '}
-                    {a.repaymentAccountName}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+          )}
         </section>
 
         <section className="review-section">
-          <h3>{paysToApplicant ? 'Payout account' : 'Selected vendors'}</h3>
+          <h3>{paysToApplicant ? 'Payout' : 'Selected vendors'}</h3>
           {paysToApplicant && (
-            <div className="detail-grid" style={{ marginBottom: a.vendorSelections?.length ? '0.75rem' : 0 }}>
-              <div className="span-2 detail-sub">
-                {otherAmount !== undefined && a.purposes.length > 1
-                  ? `The "Other" portion (${formatNaira(otherAmount)}) is paid directly to this account.`
-                  : 'The loan is paid directly to this account.'}
-              </div>
-              <div>
-                <strong>Bank</strong>
-                {a.bankName || '—'}
-              </div>
-              <div>
-                <strong>Account number</strong>
-                <span className="mono">{a.accountNumber || '—'}</span>
-              </div>
-              <div className="span-2">
-                <strong>Account name</strong>
-                {a.accountName || '—'}
-              </div>
-            </div>
+            <AccountCard
+              heading={
+                otherAmount !== undefined && a.purposes.length > 1
+                  ? `"Other" portion (${formatNaira(otherAmount)}) is paid to`
+                  : 'Loan is paid directly to'
+              }
+              bank={a.bankName}
+              number={a.accountNumber}
+              name={a.accountName}
+            />
           )}
           {a.vendorSelections && a.vendorSelections.length > 0 ? (
             <>
-              {paysToApplicant && <h3>Selected vendors</h3>}
+              {paysToApplicant && <h3 className="review-subhead">Selected vendors</h3>}
               <ul className="review-list vendors">
                 {a.vendorSelections.map((s, i) => {
                   const v = typeof s.vendor === 'object' ? (s.vendor as Vendor) : null;
@@ -357,7 +398,10 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
             <div className="decision-columns">
               <div className="decision-block">
                 <h4>To approve</h4>
-                <p className="review-hint">The customer repays into this account. Due 29 days after approval.</p>
+                <p className="review-hint">
+                  The customer repays into this account. Due 29 days after approval. Pre-filled with the saved
+                  default; change it only if this loan should be repaid elsewhere.
+                </p>
                 <div className="form-group">
                   <label htmlFor={`repay-bank-${a._id}`}>Repayment bank</label>
                   <input
@@ -391,6 +435,16 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
                     />
                   </div>
                 </div>
+                {differsFromDefault && (
+                  <label className={`checkbox-row ${saveAsDefault ? 'checked' : ''}`}>
+                    <input
+                      type="checkbox"
+                      checked={saveAsDefault}
+                      onChange={(e) => setSaveAsDefault(e.target.checked)}
+                    />
+                    <span>Also save this as the default repayment account for future approvals</span>
+                  </label>
+                )}
               </div>
 
               <div className="decision-block">
@@ -445,5 +499,39 @@ export function ApplicationReview({ application: a, readOnly = false, onUpdated 
         )}
       </div>
     </div>
+  );
+}
+
+function AccountCard({
+  heading,
+  bank,
+  number,
+  name,
+}: {
+  heading: string;
+  bank?: string;
+  number?: string;
+  name?: string;
+}) {
+  return (
+    <div className="account-card">
+      <div className="account-card-heading">{heading}</div>
+      <div className="account-card-bank">{bank || '—'}</div>
+      <div className="account-card-number mono">{number || '—'}</div>
+      <div className="account-card-name">{name || '—'}</div>
+    </div>
+  );
+}
+
+function DueChip({ dueDate }: { dueDate: string }) {
+  const days = daysUntil(dueDate);
+  if (days < 0) {
+    return <span className="badge badge-rejected due-chip">{Math.abs(days)} day{Math.abs(days) === 1 ? '' : 's'} overdue</span>;
+  }
+  if (days === 0) return <span className="badge badge-processing due-chip">Due today</span>;
+  return (
+    <span className={`badge ${days <= 5 ? 'badge-processing' : 'badge-approved'} due-chip`}>
+      {days} day{days === 1 ? '' : 's'} left
+    </span>
   );
 }
